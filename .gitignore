@@ -1,0 +1,21 @@
+# Node
+node_modules/
+
+# Env
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite
+frontend/dist/
+
+# Express
+backend/node_modules/
+backend/.env
+
+# OS
+.DS_Store
