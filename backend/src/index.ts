@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as GitHubStrategy } from "passport-github2";
+import authRouter from "./routes/auth";
+import storiesRouter from "./routes/stories";
 
 dotenv.config();
 
@@ -50,42 +52,10 @@ passport.use(
   )
 );
 
-// --- GitHub OAuth routes ---
-app.get(
-  "/auth/github",
-  passport.authenticate("github", { scope: ["user", "repo"] })
-);
+app.use("/auth", authRouter);
+app.use("/api", storiesRouter);
 
-app.get(
-  "/auth/github/callback",
-  passport.authenticate("github", { failureRedirect: "/" }),
-  (req: Request, res: Response) => {
-    // Successful authentication, redirect or respond
-    res.redirect("http://localhost:5173");
-  }
-);
-
-// --- Fetch repo commits and diffs ---
-app.get("/api/repos/:owner/:repo/commits", (req: Request, res: Response) => {
-  // TODO: Fetch commits from GitHub API
-  res.json({ message: "Fetch commits not implemented yet" });
-});
-
-app.get(
-  "/api/repos/:owner/:repo/commits/:sha/diff",
-  (req: Request, res: Response) => {
-    // TODO: Fetch commit diff from GitHub API
-    res.json({ message: "Fetch commit diff not implemented yet" });
-  }
-);
-
-// --- Gemini narration ---
-app.post("/api/narrate", (req: Request, res: Response) => {
-  // TODO: Send commit data to Gemini API and return narration
-  res.json({ message: "Gemini narration not implemented yet" });
-});
-
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8001;
 app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);
 });
