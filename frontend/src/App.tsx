@@ -8,6 +8,7 @@ import {
 import LoginPage from "./components/LoginPage";
 import Dashboard from "./components/Dashboard";
 import { useUserStore } from "./stores/userStore";
+import { apiClient } from "./utils/api";
 
 const App: React.FC = () => {
   const { isAuthenticated, setUser, setLoading } = useUserStore();
@@ -17,21 +18,17 @@ const App: React.FC = () => {
     const checkAuth = async () => {
       setLoading(true);
       try {
-        const response = await fetch("http://localhost:8001/auth/status", {
-          credentials: "include",
-        });
+        const response = await apiClient.auth.status();
+        const data = response.data;
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated && data.user) {
-            setUser({
-              id: data.user.id,
-              githubId: data.user.githubId,
-              name: data.user.name,
-              username: data.user.username,
-              avatarUrl: data.user.avatarUrl,
-            });
-          }
+        if (data.authenticated && data.user) {
+          setUser({
+            id: data.user.id,
+            githubId: data.user.githubId,
+            name: data.user.name,
+            username: data.user.username,
+            avatarUrl: data.user.avatarUrl,
+          });
         }
       } catch (error) {
         console.error("Auth check failed:", error);

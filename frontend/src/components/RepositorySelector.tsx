@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "../utils/api";
 
-type Repository = {
+interface Repository {
   id: number;
   name: string;
   full_name: string;
@@ -8,14 +9,14 @@ type Repository = {
   private: boolean;
   html_url: string;
   updated_at: string;
-};
+}
 
-type ConnectedRepository = {
+interface ConnectedRepository {
   id: string;
   name: string;
   githubRepoId: string;
   narration: string[];
-};
+}
 
 const RepositorySelector: React.FC = () => {
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -33,16 +34,8 @@ const RepositorySelector: React.FC = () => {
 
   const fetchRepositories = async () => {
     try {
-      const response = await fetch("http://localhost:8001/api/repos/github", {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch repositories");
-      }
-
-      const data = await response.json();
-      setRepositories(data);
+      const response = await apiClient.repos.getGitHubRepos();
+      setRepositories(response.data);
     } catch (err) {
       setError("Failed to load repositories");
       console.error("Error fetching repositories:", err);
@@ -53,17 +46,8 @@ const RepositorySelector: React.FC = () => {
 
   const fetchConnectedRepositories = async () => {
     try {
-      const response = await fetch(
-        "http://localhost:8001/api/repos/connected",
-        {
-          credentials: "include",
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectedRepos(data);
-      }
+      const response = await apiClient.repos.getConnected();
+      setConnectedRepos(response.data);
     } catch (err) {
       console.error("Error fetching connected repositories:", err);
     }
@@ -72,22 +56,11 @@ const RepositorySelector: React.FC = () => {
   const connectRepository = async (repo: Repository) => {
     setConnecting(repo.id);
     try {
-      const response = await fetch("http://localhost:8001/api/repos/connect", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          githubRepoId: repo.id,
-          name: repo.name,
-        }),
+      await apiClient.repos.connect({
+        githubRepoId: repo.id,
+        name: repo.name,
+        full_name: repo.full_name, // Add the full_name
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to connect repository");
-      }
 
       // Refresh connected repositories
       await fetchConnectedRepositories();

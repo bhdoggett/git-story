@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import CommitHistory from "./CommitHistory";
+import { apiClient } from "../utils/api";
 
 interface ConnectedRepository {
   id: string;
@@ -12,6 +14,8 @@ const StoriesList: React.FC = () => {
     []
   );
   const [loading, setLoading] = useState(true);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnectedRepositories();
@@ -19,21 +23,25 @@ const StoriesList: React.FC = () => {
 
   const fetchConnectedRepositories = async () => {
     try {
-      const response = await fetch(
-        "http://localhost:8001/api/repos/connected",
-        {
-          credentials: "include",
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setConnectedRepos(data);
-      }
+      const response = await apiClient.repos.getConnected();
+      setConnectedRepos(response.data);
     } catch (err) {
       console.error("Error fetching connected repositories:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const disconnectRepository = async (repoId: string) => {
+    setDisconnecting(repoId);
+    try {
+      await apiClient.repos.disconnect(repoId);
+      // Refresh the list
+      await fetchConnectedRepositories();
+    } catch (err) {
+      console.error("Error disconnecting repository:", err);
+    } finally {
+      setDisconnecting(null);
     }
   };
 
@@ -72,13 +80,13 @@ const StoriesList: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {connectedRepos.map((repo) => (
         <div
           key={repo.id}
-          className="bg-white border border-gray-200 rounded-lg p-4"
+          className="bg-white border border-gray-200 rounded-lg p-6"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex-1">
               <h4 className="text-lg font-medium text-gray-900">{repo.name}</h4>
               <p className="text-sm text-gray-500 mt-1">
@@ -89,25 +97,38 @@ const StoriesList: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2">
               <button
+                onClick={() =>
+                  setSelectedRepo(selectedRepo === repo.id ? null : repo.id)
+                }
+                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+              >
+                {selectedRepo === repo.id ? "Hide Commits" : "View Commits"}
+              </button>
+              <button
                 onClick={() => {
                   // TODO: Implement story generation
                   alert("Story generation feature coming soon!");
                 }}
-                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800 hover:bg-green-200"
               >
                 Generate Story
               </button>
               <button
-                onClick={() => {
-                  // TODO: Implement story viewing
-                  alert("Story viewing feature coming soon!");
-                }}
-                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
+                onClick={() => disconnectRepository(repo.id)}
+                disabled={disconnecting === repo.id}
+                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-red-100 text-red-800 hover:bg-red-200 disabled:opacity-50"
               >
-                View Story
+                {disconnecting === repo.id ? "Disconnecting..." : "Disconnect"}
               </button>
             </div>
           </div>
+
+          {/* Commit History */}
+          {selectedRepo === repo.id && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <CommitHistory repoId={repo.id} repoName={repo.name} />
+            </div>
+          )}
         </div>
       ))}
     </div>

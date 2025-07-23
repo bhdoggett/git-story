@@ -6,7 +6,6 @@ import session from "express-session";
 import passport from "passport";
 import { Strategy as GitHubStrategy } from "passport-github2";
 import authRouter from "./routes/auth";
-import storiesRouter from "./routes/stories";
 import reposRouter from "./routes/repos";
 
 dotenv.config();
@@ -54,7 +53,6 @@ passport.use(
 );
 
 app.use("/auth", authRouter);
-app.use("/api", storiesRouter);
 app.use("/api/repos", reposRouter);
 
 const PORT = process.env.PORT || 8001;
