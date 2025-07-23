@@ -4,6 +4,30 @@ import prisma from "../lib/prisma";
 
 const router = Router();
 
+// --- Auth status endpoint ---
+router.get("/status", (req: Request, res: Response) => {
+  if (req.isAuthenticated()) {
+    res.json({ authenticated: true, user: req.user });
+  } else {
+    res.status(401).json({ authenticated: false });
+  }
+});
+
+// --- Logout endpoint ---
+router.get("/logout", (req: Request, res: Response) => {
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({ error: "Logout failed" });
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Session destruction failed" });
+      }
+      res.redirect("http://localhost:5173/login");
+    });
+  });
+});
+
 // --- GitHub OAuth routes ---
 router.get(
   "/github",
@@ -50,10 +74,10 @@ router.get(
       req.session.accessToken = accessToken;
       req.session.userId = dbUser.id;
 
-      res.redirect("http://localhost:5173?success=true");
+      res.redirect("http://localhost:5173/dashboard");
     } catch (error) {
       console.error("Error in GitHub callback:", error);
-      res.redirect("http://localhost:5173?error=database_error");
+      res.redirect("http://localhost:5173/login?error=database_error");
     }
   }
 );

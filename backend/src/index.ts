@@ -7,6 +7,7 @@ import passport from "passport";
 import { Strategy as GitHubStrategy } from "passport-github2";
 import authRouter from "./routes/auth";
 import storiesRouter from "./routes/stories";
+import reposRouter from "./routes/repos";
 
 dotenv.config();
 
@@ -43,7 +44,7 @@ passport.use(
       clientSecret: process.env.GITHUB_CLIENT_SECRET || "",
       callbackURL:
         process.env.GITHUB_CALLBACK_URL ||
-        "http://localhost:3001/auth/github/callback",
+        "http://localhost:3000/auth/github/callback",
     },
     (accessToken: string, refreshToken: string, profile: any, done: any) => {
       // You can store/retrieve user info here
@@ -54,6 +55,7 @@ passport.use(
 
 app.use("/auth", authRouter);
 app.use("/api", storiesRouter);
+app.use("/api/repos", reposRouter);
 
 const PORT = process.env.PORT || 8001;
 app.listen(PORT, () => {
