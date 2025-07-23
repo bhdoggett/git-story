@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-interface Repository {
+type Repository = {
   id: number;
   name: string;
   full_name: string;
@@ -8,14 +8,14 @@ interface Repository {
   private: boolean;
   html_url: string;
   updated_at: string;
-}
+};
 
-interface ConnectedRepository {
+type ConnectedRepository = {
   id: string;
   name: string;
   githubRepoId: string;
   narration: string[];
-}
+};
 
 const RepositorySelector: React.FC = () => {
   const [repositories, setRepositories] = useState<Repository[]>([]);

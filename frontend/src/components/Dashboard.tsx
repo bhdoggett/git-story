@@ -2,13 +2,15 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RepositorySelector from "./RepositorySelector";
 import StoriesList from "./StoriesList";
+import { useUserStore } from "../stores/userStore";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"stories" | "repos">("stories");
+  const { user, logout } = useUserStore();
 
   const handleLogout = () => {
-    // Clear session and redirect to login
+    logout();
     window.location.href = "http://localhost:8001/auth/logout";
   };
 
@@ -22,7 +24,9 @@ const Dashboard: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-900">Git Story</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome back!</span>
+              <span className="text-gray-700">
+                Welcome back, {user?.name || "User"}!
+              </span>
               <button
                 onClick={handleLogout}
                 className="text-gray-500 hover:text-gray-700 text-sm font-medium"

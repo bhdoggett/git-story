@@ -7,7 +7,38 @@ const router = Router();
 // --- Auth status endpoint ---
 router.get("/status", (req: Request, res: Response) => {
   if (req.isAuthenticated()) {
-    res.json({ authenticated: true, user: req.user });
+    // Get user data from database
+    const userId = req.session.userId;
+    if (userId) {
+      // Import prisma here to avoid circular dependencies
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
+
+      prisma.user
+        .findUnique({
+          where: { id: userId },
+        })
+        .then((user: any) => {
+          if (user) {
+            res.json({
+              authenticated: true,
+              user: {
+                id: user.id,
+                githubId: user.githubId,
+                name: user.name,
+                username: user.name, // Using name as username for now
+              },
+            });
+          } else {
+            res.status(401).json({ authenticated: false });
+          }
+        })
+        .catch(() => {
+          res.status(401).json({ authenticated: false });
+        });
+    } else {
+      res.status(401).json({ authenticated: false });
+    }
   } else {
     res.status(401).json({ authenticated: false });
   }
