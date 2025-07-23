@@ -6,39 +6,40 @@ const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // Check for OAuth callback parameters
     const error = searchParams.get("error");
     if (error) {
       console.error("OAuth error:", error);
-      // You could show an error message here
     }
   }, [searchParams]);
 
   const handleGitHubLogin = () => {
-    // Redirect to backend GitHub OAuth endpoint
     window.location.href = "http://localhost:8001/auth/github";
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Git Story</h1>
-          <p className="text-gray-600">
-            Connect your GitHub repositories and create stories
+    <div className="min-h-screen bg-black flex flex-col justify-center items-center py-12 px-4">
+      <div className="w-full max-w-md">
+        {/* Logo/Title Section */}
+        <div className="text-center mb-12">
+          <h1 className="text-6xl font-bold text-white mb-4 tracking-tight">
+            Git Story
+          </h1>
+          <p className="text-xl text-gray-300 font-light leading-relaxed">
+            Transform your repositories into captivating stories
           </p>
         </div>
-      </div>
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <div className="space-y-6">
+
+        {/* Login Card */}
+        <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-3xl p-8 shadow-2xl">
+          <div className="space-y-8">
+            {/* GitHub Button */}
             <div>
               <button
                 onClick={handleGitHubLogin}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+                className="w-full flex justify-center items-center py-4 px-6 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 rounded-2xl text-white font-medium text-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-gray-600 focus:ring-opacity-50"
               >
                 <svg
-                  className="w-5 h-5 mr-2"
+                  className="w-6 h-6 mr-3"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -51,13 +52,44 @@ const LoginPage: React.FC = () => {
                 Continue with GitHub
               </button>
             </div>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-900/50 text-gray-400">
+                  Secure authentication
+                </span>
+              </div>
+            </div>
+
+            {/* Terms */}
             <div className="text-center">
-              <p className="text-sm text-gray-500">
-                By continuing, you agree to our terms of service and privacy
-                policy
+              <p className="text-sm text-gray-400 leading-relaxed">
+                By continuing, you agree to our{" "}
+                <a
+                  href="#"
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  terms of service
+                </a>{" "}
+                and{" "}
+                <a
+                  href="#"
+                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  privacy policy
+                </a>
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8">
+          <p className="text-gray-500 text-sm">Built with ❤️ for developers</p>
         </div>
       </div>
     </div>
