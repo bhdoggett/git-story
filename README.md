@@ -6,7 +6,9 @@ A web app that narrates the story of your GitHub repository's development using 
 
 - Link your GitHub repositories via OAuth
 - Fetch commit messages and diffs
-- Use Gemini API to generate a narrative of your repo's development
+- Use Gemini AI to analyze individual commits in layman's terms
+- Batch analyze multiple commits at once
+- Generate clear, non-technical explanations of code changes
 - View the story in a modern React UI
 
 ## Tech Stack
@@ -26,7 +28,16 @@ cd git-story
 
 ### 2. Environment Variables
 
-Copy `.env.example` to `.env` in both `backend` and `frontend` as needed, and fill in your API keys and secrets.
+Copy `.env.example` to `.env` in the `backend` directory and fill in your API keys and secrets:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+You'll need to set up:
+- **GitHub OAuth App**: Create an OAuth app at https://github.com/settings/developers
+- **Gemini API Key**: Get your free API key at https://ai.google.dev/
 
 ### 3. Install dependencies
 

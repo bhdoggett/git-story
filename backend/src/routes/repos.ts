@@ -1,7 +1,16 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
+import { GeminiService } from "../lib/geminiService";
 
 const router = Router();
+
+// Initialize Gemini service with error handling
+let geminiService: GeminiService | null = null;
+try {
+  geminiService = new GeminiService();
+} catch (error) {
+  console.warn("Gemini service not available:", error instanceof Error ? error.message : String(error));
+}
 
 // Get user's GitHub repositories
 router.get("/github", async (req: Request, res: Response) => {
@@ -265,6 +274,184 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching commits:", error);
     res.status(500).json({ error: "Failed to fetch commits" });
+  }
+});
+
+// Analyze a specific commit with Gemini
+router.post("/:repoId/commits/:commitSha/analyze", async (req: Request, res: Response) => {
+  try {
+    // Check if Gemini service is available
+    if (!geminiService) {
+      return res.status(503).json({ error: "AI analysis service not available. Please check your Gemini API key configuration." });
+    }
+
+    // Check if user is authenticated
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const accessToken = req.session.accessToken;
+    const repoId = req.params.repoId;
+    const commitSha = req.params.commitSha;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "No access token found" });
+    }
+
+    // Get repository info from database
+    const { PrismaClient } = require("../generated/prisma");
+    const prisma = new PrismaClient();
+
+    const repo = await prisma.repo.findUnique({
+      where: { id: repoId },
+    });
+
+    if (!repo) {
+      return res.status(404).json({ error: "Repository not found" });
+    }
+
+    // Check if user owns this repository
+    if (repo.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const fullRepoName = repo.name;
+
+    // Fetch the specific commit with diff from GitHub API
+    const commitResponse = await axios.get(
+      `https://api.github.com/repos/${fullRepoName}/commits/${commitSha}`,
+      {
+        headers: {
+          Authorization: `token ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    const commitData = commitResponse.data;
+    const files = commitData.files || [];
+    const diff = files.map((file: any) => ({
+      filename: file.filename,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      changes: file.changes,
+      patch: file.patch,
+    }));
+
+    const commit = {
+      sha: commitData.sha,
+      message: commitData.commit.message,
+      author: commitData.commit.author.name,
+      date: commitData.commit.author.date,
+      url: commitData.html_url,
+      diff,
+    };
+
+    // Analyze the commit with Gemini
+    const analysis = await geminiService.analyzeCommit(commit);
+
+    res.json({ analysis, commit });
+  } catch (error) {
+    console.error("Error analyzing commit:", error);
+    res.status(500).json({ error: "Failed to analyze commit" });
+  }
+});
+
+// Analyze multiple commits with Gemini
+router.post("/:repoId/commits/analyze-batch", async (req: Request, res: Response) => {
+  try {
+    // Check if Gemini service is available
+    if (!geminiService) {
+      return res.status(503).json({ error: "AI analysis service not available. Please check your Gemini API key configuration." });
+    }
+
+    // Check if user is authenticated
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const accessToken = req.session.accessToken;
+    const repoId = req.params.repoId;
+    const { commitShas } = req.body; // Array of commit SHAs to analyze
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "No access token found" });
+    }
+
+    if (!commitShas || !Array.isArray(commitShas)) {
+      return res.status(400).json({ error: "commitShas array is required" });
+    }
+
+    // Get repository info from database
+    const { PrismaClient } = require("../generated/prisma");
+    const prisma = new PrismaClient();
+
+    const repo = await prisma.repo.findUnique({
+      where: { id: repoId },
+    });
+
+    if (!repo) {
+      return res.status(404).json({ error: "Repository not found" });
+    }
+
+    // Check if user owns this repository
+    if (repo.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const fullRepoName = repo.name;
+
+    // Fetch commits with diffs
+    const commits = await Promise.all(
+      commitShas.map(async (sha: string) => {
+        try {
+          const commitResponse = await axios.get(
+            `https://api.github.com/repos/${fullRepoName}/commits/${sha}`,
+            {
+              headers: {
+                Authorization: `token ${accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
+
+          const commitData = commitResponse.data;
+          const files = commitData.files || [];
+          const diff = files.map((file: any) => ({
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch: file.patch,
+          }));
+
+          return {
+            sha: commitData.sha,
+            message: commitData.commit.message,
+            author: commitData.commit.author.name,
+            date: commitData.commit.author.date,
+            url: commitData.html_url,
+            diff,
+          };
+        } catch (error) {
+          console.error(`Error fetching commit ${sha}:`, error);
+          return null;
+        }
+      })
+    );
+
+    // Filter out failed commits
+    const validCommits = commits.filter(commit => commit !== null);
+
+    // Analyze commits with Gemini
+    const analyses = await geminiService.analyzeBatchCommits(validCommits);
+
+    res.json({ analyses });
+  } catch (error) {
+    console.error("Error analyzing commits:", error);
+    res.status(500).json({ error: "Failed to analyze commits" });
   }
 });
 

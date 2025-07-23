@@ -63,6 +63,14 @@ export const apiClient = {
 
     // Get commit history
     getCommits: (repoId: string) => api.get(`/api/repos/${repoId}/commits`),
+
+    // Analyze single commit with Gemini
+    analyzeCommit: (repoId: string, commitSha: string) => 
+      api.post(`/api/repos/${repoId}/commits/${commitSha}/analyze`),
+
+    // Analyze multiple commits with Gemini
+    analyzeCommitsBatch: (repoId: string, commitShas: string[]) => 
+      api.post(`/api/repos/${repoId}/commits/analyze-batch`, { commitShas }),
   },
 };
 

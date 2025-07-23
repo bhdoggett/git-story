@@ -17,6 +17,7 @@ interface Commit {
   date: string;
   url: string;
   diff: DiffFile[];
+  analysis?: string;
 }
 
 interface CommitHistoryProps {
@@ -29,6 +30,8 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
+  const [analyzingCommit, setAnalyzingCommit] = useState<string | null>(null);
+  const [analyzingBatch, setAnalyzingBatch] = useState(false);
 
   useEffect(() => {
     fetchCommits();
@@ -43,6 +46,52 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
       setError(err instanceof Error ? err.message : "Failed to fetch commits");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const analyzeCommit = async (commitSha: string) => {
+    try {
+      setAnalyzingCommit(commitSha);
+      const response = await apiClient.repos.analyzeCommit(repoId, commitSha);
+      
+      // Update the specific commit with the analysis
+      setCommits(prevCommits => 
+        prevCommits.map(commit => 
+          commit.sha === commitSha 
+            ? { ...commit, analysis: response.data.analysis }
+            : commit
+        )
+      );
+    } catch (err: any) {
+      console.error("Failed to analyze commit:", err);
+      const errorMessage = err.response?.data?.error || "Failed to analyze commit";
+      setError(errorMessage);
+      setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
+    } finally {
+      setAnalyzingCommit(null);
+    }
+  };
+
+  const analyzeAllCommits = async () => {
+    try {
+      setAnalyzingBatch(true);
+      const commitShas = commits.map(commit => commit.sha);
+      const response = await apiClient.repos.analyzeCommitsBatch(repoId, commitShas);
+      
+      // Update all commits with their analyses
+      setCommits(prevCommits => 
+        prevCommits.map(commit => ({
+          ...commit,
+          analysis: response.data.analyses[commit.sha] || commit.analysis
+        }))
+      );
+    } catch (err: any) {
+      console.error("Failed to analyze commits:", err);
+      const errorMessage = err.response?.data?.error || "Failed to analyze commits";
+      setError(errorMessage);
+      setTimeout(() => setError(null), 5000); // Clear error after 5 seconds
+    } finally {
+      setAnalyzingBatch(false);
     }
   };
 
@@ -124,7 +173,28 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
         <h3 className="text-lg font-medium text-white">
           Commit History - {repoName}
         </h3>
-        <span className="text-sm text-gray-400">{commits.length} commits</span>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={analyzeAllCommits}
+            disabled={analyzingBatch || commits.length === 0}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center space-x-2"
+          >
+            {analyzingBatch ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Analyzing...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span>Analyze All with AI</span>
+              </>
+            )}
+          </button>
+          <span className="text-sm text-gray-400">{commits.length} commits</span>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -148,6 +218,32 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
               </div>
               <div className="ml-4 flex items-center space-x-2">
                 <button
+                  onClick={() => analyzeCommit(commit.sha)}
+                  disabled={analyzingCommit === commit.sha || !!commit.analysis}
+                  className="text-purple-400 hover:text-purple-300 disabled:text-purple-600 disabled:cursor-not-allowed text-sm font-medium flex items-center space-x-1"
+                >
+                  {analyzingCommit === commit.sha ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-400"></div>
+                      <span>Analyzing...</span>
+                    </>
+                  ) : commit.analysis ? (
+                    <>
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span>Analyzed</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span>Analyze</span>
+                    </>
+                  )}
+                </button>
+                <button
                   onClick={() =>
                     setExpandedCommit(
                       expandedCommit === commit.sha ? null : commit.sha
@@ -167,6 +263,21 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
                 </a>
               </div>
             </div>
+
+            {/* AI Analysis */}
+            {commit.analysis && (
+              <div className="mb-4 p-4 bg-purple-900/20 border border-purple-700 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span className="text-sm font-medium text-purple-300">AI Analysis</span>
+                </div>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {commit.analysis}
+                </p>
+              </div>
+            )}
 
             {/* File changes summary */}
             <div className="mb-3">
