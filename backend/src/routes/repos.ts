@@ -209,16 +209,59 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
       }
     );
 
-    const commits = response.data.map((commit: any) => ({
-      sha: commit.sha,
-      message: commit.commit.message,
-      author: commit.commit.author.name,
-      date: commit.commit.author.date,
-      url: commit.html_url,
-    }));
+    // Fetch diffs for each commit
+    const commitsWithDiffs = await Promise.all(
+      response.data.map(async (commit: any) => {
+        try {
+          // Get the diff for this commit
+          const diffResponse = await axios.get(
+            `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
+            {
+              headers: {
+                Authorization: `token ${accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
 
-    console.log("Successfully fetched", commits.length, "commits");
-    res.json(commits);
+          const files = diffResponse.data.files || [];
+          const diff = files.map((file: any) => ({
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch: file.patch,
+          }));
+
+          return {
+            sha: commit.sha,
+            message: commit.commit.message,
+            author: commit.commit.author.name,
+            date: commit.commit.author.date,
+            url: commit.html_url,
+            diff,
+          };
+        } catch (error) {
+          console.error(`Error fetching diff for commit ${commit.sha}:`, error);
+          return {
+            sha: commit.sha,
+            message: commit.commit.message,
+            author: commit.commit.author.name,
+            date: commit.commit.author.date,
+            url: commit.html_url,
+            diff: [],
+          };
+        }
+      })
+    );
+
+    console.log(
+      "Successfully fetched",
+      commitsWithDiffs.length,
+      "commits with diffs"
+    );
+    res.json(commitsWithDiffs);
   } catch (error) {
     console.error("Error fetching commits:", error);
     res.status(500).json({ error: "Failed to fetch commits" });

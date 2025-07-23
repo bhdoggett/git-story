@@ -13,7 +13,9 @@ const LoginPage: React.FC = () => {
   }, [searchParams]);
 
   const handleGitHubLogin = () => {
-    window.location.href = "http://localhost:8001/auth/github";
+    const apiBaseUrl =
+      import.meta.env.VITE_API_BASE_URL || "http://localhost:8001";
+    window.location.href = `${apiBaseUrl}/auth/github`;
   };
 
   return (

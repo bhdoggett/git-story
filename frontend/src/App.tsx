@@ -11,7 +11,7 @@ import { useUserStore } from "./stores/userStore";
 import { apiClient } from "./utils/api";
 
 const App: React.FC = () => {
-  const { isAuthenticated, setUser, setLoading } = useUserStore();
+  const { isAuthenticated, setUser, setLoading, isLoading } = useUserStore();
 
   useEffect(() => {
     // Check if user is authenticated by looking for session
@@ -37,17 +37,17 @@ const App: React.FC = () => {
       }
     };
 
+    // Only run auth check once on mount
     checkAuth();
-  }, [setUser, setLoading]);
+  }, []); // Remove dependencies to prevent re-runs
 
   // Show loading while checking authentication
-  const { isLoading } = useUserStore();
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+          <p className="mt-2 text-gray-300">Loading...</p>
         </div>
       </div>
     );

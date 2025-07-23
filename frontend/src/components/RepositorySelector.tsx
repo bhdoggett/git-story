@@ -82,14 +82,14 @@ const RepositorySelector: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+      <div className="bg-red-900/50 border border-red-800 rounded-md p-4">
         <div className="flex">
           <div className="flex-shrink-0">
             <svg
@@ -105,8 +105,8 @@ const RepositorySelector: React.FC = () => {
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
-            <div className="mt-2 text-sm text-red-700">{error}</div>
+            <h3 className="text-sm font-medium text-red-400">Error</h3>
+            <div className="mt-2 text-sm text-red-300">{error}</div>
           </div>
         </div>
       </div>
@@ -118,21 +118,21 @@ const RepositorySelector: React.FC = () => {
       {/* Connected Repositories */}
       {connectedRepos.length > 0 && (
         <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
+          <h3 className="text-lg font-medium text-white mb-4">
             Connected Repositories
           </h3>
           <div className="grid gap-4">
             {connectedRepos.map((repo) => (
               <div
                 key={repo.id}
-                className="bg-green-50 border border-green-200 rounded-lg p-4"
+                className="bg-green-900/20 border border-green-800 rounded-lg p-4"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-medium text-green-900">
+                    <h4 className="text-sm font-medium text-green-300">
                       {repo.name}
                     </h4>
-                    <p className="text-sm text-green-700">Connected</p>
+                    <p className="text-sm text-green-400">Connected</p>
                   </div>
                   <div className="flex items-center">
                     <svg
@@ -156,7 +156,7 @@ const RepositorySelector: React.FC = () => {
 
       {/* Available Repositories */}
       <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <h3 className="text-lg font-medium text-white mb-4">
           Available Repositories
         </h3>
         <div className="grid gap-4">
@@ -165,44 +165,44 @@ const RepositorySelector: React.FC = () => {
             return (
               <div
                 key={repo.id}
-                className="bg-white border border-gray-200 rounded-lg p-4"
+                className="bg-gray-800 border border-gray-700 rounded-lg p-4"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
-                      <h4 className="text-sm font-medium text-gray-900">
+                      <h4 className="text-sm font-medium text-white">
                         {repo.name}
                       </h4>
                       {repo.private && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300">
                           Private
                         </span>
                       )}
                     </div>
                     {repo.description && (
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-gray-400 mt-1">
                         {repo.description}
                       </p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       Updated {new Date(repo.updated_at).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="ml-4">
                     {connected ? (
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
                         Connected
                       </span>
                     ) : (
                       <button
                         onClick={() => connectRepository(repo)}
                         disabled={connecting === repo.id}
-                        className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 hover:bg-blue-800/50 border border-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {connecting === repo.id ? (
                           <>
                             <svg
-                              className="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-800"
+                              className="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-300"
                               fill="none"
                               viewBox="0 0 24 24"
                             >
