@@ -65,15 +65,33 @@ export const apiClient = {
     getCommits: (repoId: string) => api.get(`/api/repos/${repoId}/commits`),
 
     // Analyze single commit with Gemini
-    analyzeCommit: (repoId: string, commitSha: string) => 
+    analyzeCommit: (repoId: string, commitSha: string) =>
       api.post(`/api/repos/${repoId}/commits/${commitSha}/analyze`),
 
     // Analyze multiple commits with Gemini
-    analyzeCommitsBatch: (repoId: string, commitShas: string[]) => 
+    analyzeCommitsBatch: (repoId: string, commitShas: string[]) =>
       api.post(`/api/repos/${repoId}/commits/analyze-batch`, { commitShas }),
 
     // Generate a story for a repository
     generateStory: (repoId: string) => api.post(`/api/repos/${repoId}/story`),
+  },
+
+  // Story endpoints
+  stories: {
+    // Generate intelligent chapters for a repository
+    generateChapters: (repoId: string) =>
+      api.post(`/api/stories/generate-chapters/${repoId}`),
+
+    // Get story with chapters
+    getStory: (repoId: string) => api.get(`/api/stories/story/${repoId}`),
+
+    // Update chapter notes
+    updateChapterNotes: (chapterId: string, userNotes: string) =>
+      api.put(`/api/stories/chapters/${chapterId}/notes`, { userNotes }),
+
+    // Regenerate chapter summary
+    regenerateChapterSummary: (chapterId: string) =>
+      api.post(`/api/stories/chapters/${chapterId}/regenerate-summary`),
   },
 };
 

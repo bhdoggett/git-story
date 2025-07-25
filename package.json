@@ -12,13 +12,12 @@
     "dev:frontend": "npm run dev --workspace frontend",
     "build": "npm run build --workspace backend && npm run build --workspace frontend",
     "lint": "npm run lint --workspace backend && npm run lint --workspace frontend",
-    "format": "npm run format --workspace backend && npm run format --workspace frontend"
+    "format": "npm run format --workspace backend && npm run format --workspace frontend",
+    "db:migrate": "npm run db:migrate --workspace backend",
+    "db:generate": "npm run db:generate --workspace backend",
+    "db:studio": "npm run db:studio --workspace backend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "prisma": "^6.12.0"
-  },
-  "dependencies": {
-    "@prisma/client": "^6.12.0"
+    "concurrently": "^8.2.2"
   }
 }

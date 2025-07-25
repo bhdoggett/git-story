@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import CommitHistory from "./CommitHistory";
+import IntelligentStory from "./IntelligentStory";
 import { apiClient } from "../utils/api";
 
 interface ConnectedRepository {
@@ -16,9 +17,10 @@ const StoriesList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
-  const [story, setStory] = useState<any>(null);
-  const [storyLoading, setStoryLoading] = useState(false);
-  const [chapterNotes, setChapterNotes] = useState<{ [idx: number]: string }>({});
+  const [intelligentStoryView, setIntelligentStoryView] = useState<{
+    repoId: string;
+    repoName: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchConnectedRepositories();
@@ -48,23 +50,8 @@ const StoriesList: React.FC = () => {
     }
   };
 
-  const handleGenerateStory = async (repoId: string) => {
-    setStoryLoading(true);
-    setStory(null);
-    try {
-      const response = await apiClient.repos.generateStory(repoId);
-      setStory(response.data);
-      // Initialize notes state
-      const notes: { [idx: number]: string } = {};
-      (response.data.chapters || []).forEach((ch: any, idx: number) => {
-        notes[idx] = ch.note || "";
-      });
-      setChapterNotes(notes);
-    } catch (err) {
-      alert("Failed to generate story");
-    } finally {
-      setStoryLoading(false);
-    }
+  const handleGenerateStory = async (repoId: string, repoName: string) => {
+    setIntelligentStoryView({ repoId, repoName });
   };
 
   if (loading) {
@@ -99,6 +86,24 @@ const StoriesList: React.FC = () => {
     );
   }
 
+  // If we're in intelligent story view, show that component
+  if (intelligentStoryView) {
+    return (
+      <div>
+        <button
+          onClick={() => setIntelligentStoryView(null)}
+          className="mb-4 inline-flex items-center px-3 py-2 rounded-md text-sm font-medium bg-gray-700 text-white hover:bg-gray-600"
+        >
+          ← Back to Stories List
+        </button>
+        <IntelligentStory
+          repoId={intelligentStoryView.repoId}
+          repoName={intelligentStoryView.repoName}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {connectedRepos.map((repo) => (
@@ -125,11 +130,10 @@ const StoriesList: React.FC = () => {
                 {selectedRepo === repo.id ? "Hide Commits" : "View Commits"}
               </button>
               <button
-                onClick={() => handleGenerateStory(repo.id)}
+                onClick={() => handleGenerateStory(repo.id, repo.name)}
                 className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-900/50 text-green-300 hover:bg-green-800/50 border border-green-700"
-                disabled={storyLoading}
               >
-                {storyLoading ? "Generating..." : "Generate Story"}
+                Generate Story
               </button>
               <button
                 onClick={() => disconnectRepository(repo.id)}
@@ -140,42 +144,6 @@ const StoriesList: React.FC = () => {
               </button>
             </div>
           </div>
-
-          {/* Story View */}
-          {story && (
-            <div className="bg-gray-900 border border-gray-700 rounded p-4 mb-4">
-              <h5 className="text-white font-bold mb-2">Story</h5>
-              {story.chapters && story.chapters.length > 0 ? (
-                <div className="space-y-4">
-                  {story.chapters.map((chapter: any, idx: number) => (
-                    <div key={idx} className="bg-gray-800 rounded p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-blue-300 font-semibold">Chapter {idx + 1}</span>
-                        <span className="text-xs text-gray-400">{chapter.commits.length} commits</span>
-                      </div>
-                      <ul className="text-xs text-gray-300 mb-2 max-h-32 overflow-y-auto">
-                        {chapter.commits.map((commit: any) => (
-                          <li key={commit.sha} className="mb-1">
-                            <span className="font-mono text-green-300">{commit.sha.slice(0, 7)}</span>: {commit.message}
-                            <span className="ml-2 text-gray-400">({commit.author}, {new Date(commit.date).toLocaleDateString()})</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <textarea
-                        className="w-full bg-gray-700 text-white rounded p-2 text-sm"
-                        rows={2}
-                        value={chapterNotes[idx] || ""}
-                        onChange={e => setChapterNotes({ ...chapterNotes, [idx]: e.target.value })}
-                        placeholder="Add your notes for this chapter..."
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-gray-400">No chapters found.</div>
-              )}
-            </div>
-          )}
 
           {/* Commit History */}
           {selectedRepo === repo.id && (
