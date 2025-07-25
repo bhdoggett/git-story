@@ -473,4 +473,80 @@ router.post("/:repoId/commits/analyze-batch", async (req: Request, res: Response
   }
 });
 
+// Generate a story for a repository
+router.post("/:repoId/story", async (req: Request, res: Response) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const accessToken = req.session.accessToken;
+    const repoId = req.params.repoId;
+    if (!accessToken) {
+      return res.status(401).json({ error: "No access token found" });
+    }
+    const { PrismaClient } = require("../generated/prisma");
+    const prisma = new PrismaClient();
+    const repo = await prisma.repo.findUnique({ where: { id: repoId } });
+    if (!repo) {
+      return res.status(404).json({ error: "Repository not found" });
+    }
+    if (repo.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const fullRepoName = repo.name;
+    // Fetch all commits from GitHub API using pagination
+    let allCommits = [];
+    let page = 1;
+    let keepFetching = true;
+    const perPage = 100;
+    while (keepFetching) {
+      const response = await axios.get(
+        `https://api.github.com/repos/${fullRepoName}/commits`,
+        {
+          headers: {
+            Authorization: `token ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+          params: {
+            per_page: perPage,
+            page,
+          },
+        }
+      );
+      if (response.data.length === 0) {
+        keepFetching = false;
+      } else {
+        allCommits = allCommits.concat(response.data);
+        page++;
+        if (response.data.length < perPage) {
+          keepFetching = false;
+        }
+      }
+    }
+    // Group commits into chapters (simple: every 10 commits = 1 chapter)
+    const chapters = [];
+    for (let i = 0; i < allCommits.length; i += 10) {
+      const chapterCommits = allCommits.slice(i, i + 10).map((commit: any) => ({
+        sha: commit.sha,
+        message: commit.commit.message,
+        author: commit.commit.author.name,
+        date: commit.commit.author.date,
+        url: commit.html_url,
+      }));
+      chapters.push({ commits: chapterCommits, note: "" });
+    }
+    // Save story to DB
+    const story = await prisma.story.create({
+      data: {
+        repoId: repo.id,
+        chapters: chapters,
+      },
+    });
+    res.json(story);
+  } catch (error) {
+    console.error("Error generating story:", error);
+    res.status(500).json({ error: "Failed to generate story" });
+  }
+});
+
 export default router;

@@ -71,6 +71,9 @@ export const apiClient = {
     // Analyze multiple commits with Gemini
     analyzeCommitsBatch: (repoId: string, commitShas: string[]) => 
       api.post(`/api/repos/${repoId}/commits/analyze-batch`, { commitShas }),
+
+    // Generate a story for a repository
+    generateStory: (repoId: string) => api.post(`/api/repos/${repoId}/story`),
   },
 };
 
