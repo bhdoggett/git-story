@@ -202,25 +202,41 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
     // Use the full repository name stored in the database
     const fullRepoName = repo.name; // This should now contain "owner/repo-name"
 
-    console.log("Fetching commits for repo:", fullRepoName);
+    console.log("Fetching ALL commits for repo:", fullRepoName);
 
-    // Fetch commits from GitHub API
-    const response = await axios.get(
-      `https://api.github.com/repos/${fullRepoName}/commits`,
-      {
-        headers: {
-          Authorization: `token ${accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-        params: {
-          per_page: 100, // Get last 100 commits
-        },
+    // Fetch all commits from GitHub API using pagination
+    let allCommits = [];
+    let page = 1;
+    let keepFetching = true;
+    const perPage = 100;
+    while (keepFetching) {
+      const response = await axios.get(
+        `https://api.github.com/repos/${fullRepoName}/commits`,
+        {
+          headers: {
+            Authorization: `token ${accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+          params: {
+            per_page: perPage,
+            page,
+          },
+        }
+      );
+      if (response.data.length === 0) {
+        keepFetching = false;
+      } else {
+        allCommits = allCommits.concat(response.data);
+        page++;
+        if (response.data.length < perPage) {
+          keepFetching = false;
+        }
       }
-    );
+    }
 
-    // Fetch diffs for each commit
+    // Fetch diffs for each commit (limit to first 200 for performance)
     const commitsWithDiffs = await Promise.all(
-      response.data.map(async (commit: any) => {
+      allCommits.slice(0, 200).map(async (commit: any) => {
         try {
           // Get the diff for this commit
           const diffResponse = await axios.get(
@@ -268,7 +284,9 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
     console.log(
       "Successfully fetched",
       commitsWithDiffs.length,
-      "commits with diffs"
+      "commits with diffs (out of",
+      allCommits.length,
+      "total commits)"
     );
     res.json(commitsWithDiffs);
   } catch (error) {

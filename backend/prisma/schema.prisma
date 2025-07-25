@@ -28,4 +28,13 @@ model Repo {
   githubRepoId String
   name         String
   narration    String[] // Each index is a chapter
+  stories      Story[]
+}
+
+model Story {
+  id        String   @id @default(uuid())
+  repo      Repo     @relation(fields: [repoId], references: [id])
+  repoId    String
+  createdAt DateTime @default(now())
+  chapters  Json     // Array of { commits: string[], note: string }
 }
