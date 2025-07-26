@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import passport from "passport";
 import prisma from "../lib/prisma";
 
+const CLIENT_BASE_URL = process.env.CLIENT_BASE_URL || "http://localhost:5173";
+
 const router = Router();
 
 // --- Auth status endpoint ---
@@ -54,7 +56,7 @@ router.get("/logout", (req: Request, res: Response) => {
       if (err) {
         return res.status(500).json({ error: "Session destruction failed" });
       }
-      res.redirect("http://localhost:5173/login");
+      res.redirect(`${CLIENT_BASE_URL}/login`);
     });
   });
 });
@@ -73,7 +75,7 @@ router.get(
       // Get user info from the session (set by Passport)
       const user = req.user as any;
       if (!user || !user.profile) {
-        return res.redirect("http://localhost:5173?error=auth_failed");
+        return res.redirect(`${CLIENT_BASE_URL}?error=auth_failed`);
       }
 
       const { profile, accessToken } = user;
@@ -105,10 +107,10 @@ router.get(
       req.session.accessToken = accessToken;
       req.session.userId = dbUser.id;
 
-      res.redirect("http://localhost:5173/dashboard");
+      res.redirect(`${CLIENT_BASE_URL}/dashboard`);
     } catch (error) {
       console.error("Error in GitHub callback:", error);
-      res.redirect("http://localhost:5173/login?error=database_error");
+      res.redirect(`${CLIENT_BASE_URL}/login?error=database_error`);
     }
   }
 );
