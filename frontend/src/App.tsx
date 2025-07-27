@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,9 +12,12 @@ import { apiClient } from "./utils/api";
 
 const App: React.FC = () => {
   const { isAuthenticated, setUser, setLoading, isLoading } = useUserStore();
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
   useEffect(() => {
-    // Check if user is authenticated by looking for session
+    // Only run auth check once on mount
+    if (hasCheckedAuth) return;
+
     const checkAuth = async () => {
       setLoading(true);
       try {
@@ -32,14 +35,20 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error("Auth check failed:", error);
+        // Don't retry on error - just assume not authenticated
       } finally {
         setLoading(false);
+        setHasCheckedAuth(true);
       }
     };
 
-    // Only run auth check once on mount
-    checkAuth();
-  }, []); // Remove dependencies to prevent re-runs
+    // Add a small delay to prevent rapid re-renders
+    const timer = setTimeout(() => {
+      checkAuth();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []); // Empty dependency array to run only once
 
   // Show loading while checking authentication
   if (isLoading) {

@@ -24,15 +24,23 @@ export const useUserStore = create<UserState>((set, get) => ({
   isLoading: false,
 
   setUser: (user) =>
-    set({
-      user,
-      isAuthenticated: true,
-      isLoading: false,
+    set((state) => {
+      // Only update if user is different to prevent unnecessary re-renders
+      if (state.user?.id === user.id) return state;
+      return {
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+      };
     }),
 
   setLoading: (loading) =>
-    set({
-      isLoading: loading,
+    set((state) => {
+      // Only update if loading state is different
+      if (state.isLoading === loading) return state;
+      return {
+        isLoading: loading,
+      };
     }),
 
   logout: () =>
