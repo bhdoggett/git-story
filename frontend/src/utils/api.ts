@@ -26,8 +26,13 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Handle 401/403 errors - redirect to login
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Only redirect on auth errors if we're not already on login page
+    // AND if the request wasn't to the auth status endpoint (to prevent loops)
+    if (
+      (error.response?.status === 401 || error.response?.status === 403) &&
+      window.location.pathname !== "/login" &&
+      !error.config?.url?.includes("/auth/status")
+    ) {
       // Clear user state if needed
       window.location.href = "/login";
     }
