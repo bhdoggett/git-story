@@ -1,21 +1,17 @@
 {
   "name": "git-story-monorepo",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
   "scripts": {
-    "install": "npm install --workspaces",
-    "dev": "concurrently \"npm run dev --workspace backend\" \"npm run dev --workspace frontend\"",
-    "dev:backend": "npm run dev --workspace backend",
-    "dev:frontend": "npm run dev --workspace frontend",
-    "build": "npm run build --workspace backend && npm run build --workspace frontend",
-    "lint": "npm run lint --workspace backend && npm run lint --workspace frontend",
-    "format": "npm run format --workspace backend && npm run format --workspace frontend",
-    "db:migrate": "npm run db:migrate --workspace backend",
-    "db:generate": "npm run db:generate --workspace backend",
-    "db:studio": "npm run db:studio --workspace backend"
+    "install": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd backend && npm run build && cd ../frontend && npm run build",
+    "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
+    "format": "cd backend && npm run format && cd ../frontend && npm run format",
+    "db:migrate": "cd backend && npm run db:migrate",
+    "db:generate": "cd backend && npm run db:generate",
+    "db:studio": "cd backend && npm run db:studio"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
