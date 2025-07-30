@@ -239,54 +239,49 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
 
     // Fetch diffs for each commit (limit to first 200 for performance)
     const commitsWithDiffs = await Promise.all(
-      allCommits
-        // .slice(0, 200)
-        .map(async (commit: any) => {
-          try {
-            // Get the diff for this commit
-            const diffResponse = await axios.get(
-              `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
-              {
-                headers: {
-                  Authorization: `token ${accessToken}`,
-                  Accept: "application/vnd.github.v3+json",
-                },
-              }
-            );
+      allCommits.map(async (commit: any) => {
+        try {
+          // Get the diff for this commit
+          const diffResponse = await axios.get(
+            `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
+            {
+              headers: {
+                Authorization: `token ${accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
 
-            const files = diffResponse.data.files || [];
-            const diff = files.map((file: any) => ({
-              filename: file.filename,
-              status: file.status,
-              additions: file.additions,
-              deletions: file.deletions,
-              changes: file.changes,
-              patch: file.patch,
-            }));
+          const files = diffResponse.data.files || [];
+          const diff = files.map((file: any) => ({
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch: file.patch,
+          }));
 
-            return {
-              sha: commit.sha,
-              message: commit.commit.message,
-              author: commit.commit.author.name,
-              date: commit.commit.author.date,
-              url: commit.html_url,
-              diff,
-            };
-          } catch (error) {
-            console.error(
-              `Error fetching diff for commit ${commit.sha}:`,
-              error
-            );
-            return {
-              sha: commit.sha,
-              message: commit.commit.message,
-              author: commit.commit.author.name,
-              date: commit.commit.author.date,
-              url: commit.html_url,
-              diff: [],
-            };
-          }
-        })
+          return {
+            sha: commit.sha,
+            message: commit.commit.message,
+            author: commit.commit.author.name,
+            date: commit.commit.author.date,
+            url: commit.html_url,
+            diff,
+          };
+        } catch (error) {
+          console.error(`Error fetching diff for commit ${commit.sha}:`, error);
+          return {
+            sha: commit.sha,
+            message: commit.commit.message,
+            author: commit.commit.author.name,
+            date: commit.commit.author.date,
+            url: commit.html_url,
+            diff: [],
+          };
+        }
+      })
     );
 
     console.log(
