@@ -109,6 +109,14 @@ export const apiClient = {
     // Get commit details for a chapter
     getChapterCommits: (chapterId: string) =>
       api.get(`/api/stories/chapters/${chapterId}/commits`),
+
+    // Get global context for a story
+    getGlobalContext: (repoId: string) =>
+      api.get(`/api/stories/story/${repoId}/context`),
+
+    // Update global context for a story
+    updateGlobalContext: (repoId: string, globalContext: string) =>
+      api.put(`/api/stories/story/${repoId}/context`, { globalContext }),
   },
 };
 

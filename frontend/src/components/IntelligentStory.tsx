@@ -67,6 +67,10 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const [loadingCommits, setLoadingCommits] = useState<{
     [chapterId: string]: boolean;
   }>({});
+  const [globalContext, setGlobalContext] = useState<string>("");
+  const [editingGlobalContext, setEditingGlobalContext] =
+    useState<boolean>(false);
+  const [savingContext, setSavingContext] = useState<boolean>(false);
 
   useEffect(() => {
     fetchStory();
@@ -144,6 +148,9 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
         lastUpdated: Date.now(),
         expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       });
+
+      // Fetch global context
+      await fetchGlobalContext();
     } catch (error) {
       console.error("Error fetching story:", error);
       // Story doesn't exist yet, that's okay
@@ -157,6 +164,14 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     try {
       const response = await apiClient.stories.generateChapters(repoId);
       setStory(response.data);
+
+      // Cache the story data
+      await storyCache.setStory({
+        ...response.data,
+        repoName,
+        lastUpdated: Date.now(),
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      });
 
       // Initialize notes state
       const notes: { [chapterId: string]: string } = {};
@@ -268,6 +283,30 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     }
   };
 
+  const fetchGlobalContext = async () => {
+    try {
+      const response = await apiClient.stories.getGlobalContext(repoId);
+      setGlobalContext(response.data.globalContext);
+    } catch (error) {
+      console.error("Error fetching global context:", error);
+      // Story might not exist yet, that's okay
+    }
+  };
+
+  const updateGlobalContext = async (context: string) => {
+    setSavingContext(true);
+    try {
+      await apiClient.stories.updateGlobalContext(repoId, context);
+      setGlobalContext(context);
+      setEditingGlobalContext(false);
+    } catch (error) {
+      console.error("Error updating global context:", error);
+      alert("Failed to save context. Please try again.");
+    } finally {
+      setSavingContext(false);
+    }
+  };
+
   const fetchChapterCommits = async (chapterId: string) => {
     if (chapterCommits[chapterId]) return; // Already loaded
 
@@ -336,6 +375,67 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
             "Generate Chapters"
           )}
         </button>
+      </div>
+
+      {/* Global Context Section */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+        <h4 className="text-lg font-medium text-white mb-4">
+          What should we know about your project?
+        </h4>
+        <p className="text-gray-400 text-sm mb-4">
+          Help us understand your project better by providing context about key
+          moments, important tools, dependencies, or development milestones.
+          This will help the AI generate more relevant and personalized stories.
+        </p>
+
+        {editingGlobalContext ? (
+          <div className="space-y-3">
+            <textarea
+              value={globalContext}
+              onChange={(e) => setGlobalContext(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
+              rows={4}
+              placeholder="Tell us about your project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
+              autoFocus
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setEditingGlobalContext(false);
+                  setGlobalContext(globalContext); // Reset to original value
+                }}
+                className="text-gray-400 hover:text-gray-300 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => updateGlobalContext(globalContext)}
+                disabled={savingContext}
+                className="text-blue-400 hover:text-blue-300 text-sm disabled:opacity-50"
+              >
+                {savingContext ? "Saving..." : "Save Context"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="bg-gray-900 border border-gray-600 rounded p-3 cursor-pointer hover:border-gray-500"
+            onClick={() => setEditingGlobalContext(true)}
+          >
+            {globalContext ? (
+              <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
+                {globalContext}
+              </p>
+            ) : (
+              <p className="text-gray-500 text-sm italic">
+                Click to add context about your project...
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-2">
+              Click to edit project context
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Story Content */}

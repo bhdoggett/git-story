@@ -39,9 +39,31 @@ interface CachedChapterCommits {
   expiresAt: number;
 }
 
+interface CachedRepositoryCommits {
+  repoId: string;
+  commits: Array<{
+    sha: string;
+    message: string;
+    author: string;
+    date: string;
+    url: string;
+    diff: Array<{
+      filename: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      changes: number;
+      patch?: string;
+    }>;
+    analysis?: string;
+  }>;
+  lastUpdated: number;
+  expiresAt: number;
+}
+
 class StoryCache {
   private dbName = "GitStoryCache";
-  private version = 1;
+  private version = 2;
   private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
@@ -73,6 +95,16 @@ class StoryCache {
             keyPath: "chapterId",
           });
           commitsStore.createIndex("lastUpdated", "lastUpdated", {
+            unique: false,
+          });
+        }
+
+        // Create repository commits store
+        if (!db.objectStoreNames.contains("repositoryCommits")) {
+          const repoCommitsStore = db.createObjectStore("repositoryCommits", {
+            keyPath: "repoId",
+          });
+          repoCommitsStore.createIndex("lastUpdated", "lastUpdated", {
             unique: false,
           });
         }
@@ -189,6 +221,74 @@ class StoryCache {
     });
   }
 
+  async getRepositoryCommits(
+    repoId: string
+  ): Promise<CachedRepositoryCommits | null> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(
+        ["repositoryCommits"],
+        "readonly"
+      );
+      const store = transaction.objectStore("repositoryCommits");
+      const request = store.get(repoId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cached = request.result as CachedRepositoryCommits;
+        if (cached && cached.expiresAt > Date.now()) {
+          resolve(cached);
+        } else {
+          // Remove expired cache
+          if (cached) {
+            this.deleteRepositoryCommits(repoId);
+          }
+          resolve(null);
+        }
+      };
+    });
+  }
+
+  async setRepositoryCommits(repoId: string, commits: any[]): Promise<void> {
+    if (!this.db) await this.init();
+
+    const cached: CachedRepositoryCommits = {
+      repoId,
+      commits,
+      lastUpdated: Date.now(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(
+        ["repositoryCommits"],
+        "readwrite"
+      );
+      const store = transaction.objectStore("repositoryCommits");
+      const request = store.put(cached);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async deleteRepositoryCommits(repoId: string): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(
+        ["repositoryCommits"],
+        "readwrite"
+      );
+      const store = transaction.objectStore("repositoryCommits");
+      const request = store.delete(repoId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
   async clearExpired(): Promise<void> {
     if (!this.db) await this.init();
 
@@ -224,6 +324,27 @@ class StoryCache {
       const cursor = commitsRequest.result;
       if (cursor) {
         const cached = cursor.value as CachedChapterCommits;
+        if (cached.expiresAt <= now) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
+
+    // Clear expired repository commits
+    const repoCommitsTransaction = this.db!.transaction(
+      ["repositoryCommits"],
+      "readwrite"
+    );
+    const repoCommitsStore =
+      repoCommitsTransaction.objectStore("repositoryCommits");
+    const repoCommitsIndex = repoCommitsStore.index("lastUpdated");
+    const repoCommitsRequest = repoCommitsIndex.openCursor();
+
+    repoCommitsRequest.onsuccess = () => {
+      const cursor = repoCommitsRequest.result;
+      if (cursor) {
+        const cached = cursor.value as CachedRepositoryCommits;
         if (cached.expiresAt <= now) {
           cursor.delete();
         }
