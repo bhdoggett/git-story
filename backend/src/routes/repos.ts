@@ -1,19 +1,7 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
-import { GeminiService } from "../lib/geminiService";
 
 const router = Router();
-
-// Initialize Gemini service with error handling
-let geminiService: GeminiService | null = null;
-try {
-  geminiService = new GeminiService();
-} catch (error) {
-  console.warn(
-    "Gemini service not available:",
-    error instanceof Error ? error.message : String(error)
-  );
-}
 
 // Get user's GitHub repositories
 router.get("/github", async (req: Request, res: Response) => {
@@ -158,7 +146,7 @@ router.delete("/:repoId", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Repository not found" });
     }
 
-    // Delete the repository
+    // Delete the repository (cascading will handle stories and chapters)
     await prisma.repo.delete({
       where: { id: repoId },
     });
@@ -298,19 +286,19 @@ router.get("/:repoId/commits", async (req: Request, res: Response) => {
   }
 });
 
-// Analyze a specific commit with Gemini
+// Analyze a specific commit with AI provider
 router.post(
   "/:repoId/commits/:commitSha/analyze",
   async (req: Request, res: Response) => {
-    try {
-      // Check if Gemini service is available
-      if (!geminiService) {
-        return res.status(503).json({
-          error:
-            "AI analysis service not available. Please check your Gemini API key configuration.",
-        });
-      }
+    console.log("=== COMMIT ANALYSIS ENDPOINT CALLED ===");
+    console.log("Commit analysis request received:", {
+      repoId: req.params.repoId,
+      commitSha: req.params.commitSha,
+      userId: req.session.userId,
+      isAuthenticated: req.isAuthenticated(),
+    });
 
+    try {
       // Check if user is authenticated
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: "Not authenticated" });
@@ -344,6 +332,11 @@ router.post(
       const fullRepoName = repo.name;
 
       // Fetch the specific commit with diff from GitHub API
+      console.log("🔍 Fetching commit from GitHub:", {
+        fullRepoName,
+        commitSha,
+      });
+
       const commitResponse = await axios.get(
         `https://api.github.com/repos/${fullRepoName}/commits/${commitSha}`,
         {
@@ -353,6 +346,8 @@ router.post(
           },
         }
       );
+
+      console.log("✅ GitHub API response status:", commitResponse.status);
 
       const commitData = commitResponse.data;
       const files = commitData.files || [];
@@ -374,10 +369,66 @@ router.post(
         diff,
       };
 
-      // Analyze the commit with Gemini
-      const analysis = await geminiService.analyzeCommit(commit);
+      // Get user's active AI provider
+      const aiProvider = await prisma.aIProvider.findFirst({
+        where: {
+          userId: req.session.userId,
+          isActive: true,
+        },
+      });
 
-      res.json({ analysis, commit });
+      console.log("AI Provider check:", {
+        hasUserProvider: !!aiProvider,
+        hasEnvKey: !!process.env.GEMINI_API_KEY,
+        envKeyLength: process.env.GEMINI_API_KEY?.length || 0,
+      });
+
+      if (!aiProvider) {
+        // Fallback to environment variable Google Gemini if available
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (geminiApiKey) {
+          console.log(
+            "No user AI provider found, using environment Gemini API key as fallback"
+          );
+          try {
+            const { GoogleGeminiProvider } = require("../lib/aiProviders");
+            const provider = new GoogleGeminiProvider(geminiApiKey);
+            const analysis = await provider.analyzeCommit(commit);
+            res.json({ analysis, commit });
+            return;
+          } catch (error) {
+            console.error("Error with Gemini fallback:", error);
+            return res.status(500).json({
+              error:
+                "Failed to analyze commit with Gemini fallback: " +
+                (error instanceof Error ? error.message : "Unknown error"),
+            });
+          }
+        } else {
+          return res.status(503).json({
+            error:
+              "No active AI provider found. Please add an AI provider in your settings or configure GEMINI_API_KEY environment variable.",
+          });
+        }
+      }
+
+      // Use user's configured AI provider
+      try {
+        const { AIProviderFactory } = require("../lib/aiProviders");
+        const provider = AIProviderFactory.createProvider(
+          aiProvider.provider,
+          aiProvider.apiKey
+        );
+        const analysis = await provider.analyzeCommit(commit);
+        res.json({ analysis, commit });
+      } catch (error) {
+        console.error("Error with user AI provider:", error);
+        return res.status(500).json({
+          error:
+            "Failed to analyze commit with user AI provider: " +
+            (error instanceof Error ? error.message : "Unknown error"),
+        });
+      }
     } catch (error) {
       console.error("Error analyzing commit:", error);
       res.status(500).json({ error: "Failed to analyze commit" });
@@ -385,19 +436,11 @@ router.post(
   }
 );
 
-// Analyze multiple commits with Gemini
+// Analyze multiple commits with AI provider
 router.post(
   "/:repoId/commits/analyze-batch",
   async (req: Request, res: Response) => {
     try {
-      // Check if Gemini service is available
-      if (!geminiService) {
-        return res.status(503).json({
-          error:
-            "AI analysis service not available. Please check your Gemini API key configuration.",
-        });
-      }
-
       // Check if user is authenticated
       if (!req.isAuthenticated()) {
         return res.status(401).json({ error: "Not authenticated" });
@@ -477,8 +520,41 @@ router.post(
       // Filter out failed commits
       const validCommits = commits.filter((commit) => commit !== null);
 
-      // Analyze commits with Gemini
-      const analyses = await geminiService.analyzeBatchCommits(validCommits);
+      // Get user's active AI provider
+      const aiProvider = await prisma.aIProvider.findFirst({
+        where: {
+          userId: req.session.userId,
+          isActive: true,
+        },
+      });
+
+      if (!aiProvider) {
+        // Fallback to environment variable Google Gemini if available
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (geminiApiKey) {
+          console.log(
+            "No user AI provider found, using environment Gemini API key as fallback"
+          );
+          const { GoogleGeminiProvider } = require("../lib/aiProviders");
+          const provider = new GoogleGeminiProvider(geminiApiKey);
+          const analyses = await provider.analyzeBatchCommits(validCommits);
+          res.json({ analyses });
+          return;
+        } else {
+          return res.status(503).json({
+            error:
+              "No active AI provider found. Please add an AI provider in your settings or configure GEMINI_API_KEY environment variable.",
+          });
+        }
+      }
+
+      // Use user's configured AI provider
+      const { AIProviderFactory } = require("../lib/aiProviders");
+      const provider = AIProviderFactory.createProvider(
+        aiProvider.provider,
+        aiProvider.apiKey
+      );
+      const analyses = await provider.analyzeBatchCommits(validCommits);
 
       res.json({ analyses });
     } catch (error) {

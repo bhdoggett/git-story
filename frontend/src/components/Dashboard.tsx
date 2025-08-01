@@ -2,11 +2,14 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RepositorySelector from "./RepositorySelector";
 import StoriesList from "./StoriesList";
+import AIProviderManager from "./AIProviderManager";
 import { useUserStore } from "../stores/userStore";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"stories" | "repos">("stories");
+  const [activeTab, setActiveTab] = useState<"stories" | "repos" | "ai">(
+    "stories"
+  );
   const { user, logout } = useUserStore();
 
   const handleLogout = () => {
@@ -64,12 +67,28 @@ const Dashboard: React.FC = () => {
             >
               Connect Repositories
             </button>
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "ai"
+                  ? "border-blue-500 text-blue-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-700"
+              }`}
+            >
+              AI Providers
+            </button>
           </nav>
         </div>
 
         {/* Tab Content */}
         <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-          {activeTab === "stories" ? <StoriesList /> : <RepositorySelector />}
+          {activeTab === "stories" ? (
+            <StoriesList />
+          ) : activeTab === "repos" ? (
+            <RepositorySelector />
+          ) : (
+            <AIProviderManager />
+          )}
         </div>
       </main>
     </div>

@@ -1,64 +1,53 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import prisma from "../lib/prisma";
+import { AIProviderFactory } from "../lib/aiProviders";
+import { EncryptionService } from "../lib/encryption";
 
 const router = Router();
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// Import prisma for database operations
+const { PrismaClient } = require("../generated/prisma");
+const prisma = new PrismaClient();
 
 // Helper function to analyze commits and group them by themes
-async function analyzeAndGroupCommits(commits: any[]) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+async function analyzeAndGroupCommits(commits: any[], userId: string) {
+  // Import prisma here to avoid circular dependencies
+  const { PrismaClient } = require("../generated/prisma");
+  const prisma = new PrismaClient();
 
-  const prompt = `
-  Analyze these Git commits and group them into logical chapters based on themes, features, or contributions.
-  Each group should represent a coherent development effort or feature implementation.
-  
-  Commits:
-  ${commits
-    .map(
-      (commit) => `
-  SHA: ${commit.sha}
-  Message: ${commit.commit.message}
-  Author: ${commit.commit.author.name}
-  Date: ${commit.commit.author.date}
-  Files changed: ${commit.files?.length || 0} files
-  `
-    )
-    .join("\n")}
-  
-  Return a JSON array of chapter objects with this structure:
-  [
-    {
-      "title": "Chapter title describing the theme/feature",
-      "commitShas": ["sha1", "sha2", ...],
-      "reasoning": "Brief explanation of why these commits belong together"
+  // Get user's active AI provider
+  const aiProvider = await prisma.aIProvider.findFirst({
+    where: {
+      userId,
+      isActive: true,
+    },
+  });
+
+  if (!aiProvider) {
+    // Fallback to environment variable Google Gemini if available
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey) {
+      console.log(
+        "No user AI provider found, using environment Gemini API key as fallback"
+      );
+      const { GoogleGeminiProvider } = require("../lib/aiProviders");
+      const provider = new GoogleGeminiProvider(geminiApiKey);
+      return await provider.analyzeAndGroupCommits(commits);
+    } else {
+      throw new Error(
+        "No active AI provider found. Please add an AI provider in your settings or configure GEMINI_API_KEY environment variable."
+      );
     }
-  ]
-  
-  Focus on:
-  - Feature implementations
-  - Bug fixes
-  - Refactoring efforts
-  - Documentation updates
-  - Performance improvements
-  - UI/UX changes
-  
-  Group commits that work toward the same goal or represent the same type of change.
-  `;
+  }
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // Create AI provider instance
+    const provider = AIProviderFactory.createProvider(
+      aiProvider.provider,
+      aiProvider.apiKey
+    );
 
-    // Extract JSON from the response
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-    throw new Error("Could not parse JSON response");
+    // Use the provider to analyze and group commits
+    return await provider.analyzeAndGroupCommits(commits);
   } catch (error) {
     console.error("Error analyzing commits:", error);
     // Fallback: group commits in batches of 5
@@ -76,40 +65,51 @@ async function analyzeAndGroupCommits(commits: any[]) {
 }
 
 // Helper function to generate chapter summary
-async function generateChapterSummary(commits: any[], chapterTitle: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+async function generateChapterSummary(
+  commits: any[],
+  chapterTitle: string,
+  userId: string
+) {
+  // Import prisma here to avoid circular dependencies
+  const { PrismaClient } = require("../generated/prisma");
+  const prisma = new PrismaClient();
 
-  const prompt = `
-  Generate a clear, layman-friendly summary of this Git chapter: "${chapterTitle}"
-  
-  Commits in this chapter:
-  ${commits
-    .map(
-      (commit) => `
-  - ${commit.commit.message}
-    Author: ${commit.commit.author.name}
-    Date: ${commit.commit.author.date}
-    Files: ${commit.files?.length || 0} files changed
-  `
-    )
-    .join("\n")}
-  
-  Write a summary that:
-  - Explains what was accomplished in simple terms
-  - Highlights the main changes and improvements
-  - Uses non-technical language when possible
-  - Is 2-3 sentences long
-  - Focuses on the impact and value of the changes
-  
-  Summary:
-  `;
+  // Get user's active AI provider
+  const aiProvider = await prisma.aIProvider.findFirst({
+    where: {
+      userId,
+      isActive: true,
+    },
+  });
+
+  if (!aiProvider) {
+    // Fallback to environment variable Google Gemini if available
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey) {
+      console.log(
+        "No user AI provider found, using environment Gemini API key as fallback"
+      );
+      const { GoogleGeminiProvider } = require("../lib/aiProviders");
+      const provider = new GoogleGeminiProvider(geminiApiKey);
+      return await provider.generateChapterSummary(commits, chapterTitle);
+    } else {
+      throw new Error(
+        "No active AI provider found. Please add an AI provider in your settings or configure GEMINI_API_KEY environment variable."
+      );
+    }
+  }
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text().trim();
+    // Create AI provider instance
+    const provider = AIProviderFactory.createProvider(
+      aiProvider.provider,
+      aiProvider.apiKey
+    );
+
+    // Use the provider to generate chapter summary
+    return await provider.generateChapterSummary(commits, chapterTitle);
   } catch (error) {
-    console.error("Error generating summary:", error);
+    console.error("Error generating chapter summary:", error);
     return `Summary of ${chapterTitle}: Multiple commits were made to improve the codebase.`;
   }
 }
@@ -161,7 +161,7 @@ router.post(
       const commits = await githubResponse.json();
 
       // Analyze and group commits
-      const chapterGroups = await analyzeAndGroupCommits(commits);
+      const chapterGroups = await analyzeAndGroupCommits(commits, userId);
 
       // Create or update story
       let story = await prisma.story.findFirst({
@@ -189,7 +189,8 @@ router.post(
         );
         const summary = await generateChapterSummary(
           chapterCommits,
-          group.title
+          group.title,
+          userId
         );
 
         const chapter = await prisma.chapter.create({
@@ -369,7 +370,8 @@ router.post(
       // Generate new summary
       const newSummary = await generateChapterSummary(
         commits,
-        chapter.title || "Chapter"
+        chapter.title || "Chapter",
+        userId
       );
 
       const updatedChapter = await prisma.chapter.update({

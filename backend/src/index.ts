@@ -8,6 +8,7 @@ import { Strategy as GitHubStrategy } from "passport-github2";
 import authRouter from "./routes/auth";
 import reposRouter from "./routes/repos";
 import storiesRouter from "./routes/stories";
+import aiProvidersRouter from "./routes/aiProviders";
 
 dotenv.config();
 
@@ -58,6 +59,7 @@ passport.use(
 app.use("/auth", authRouter);
 app.use("/api/repos", reposRouter);
 app.use("/api/stories", storiesRouter);
+app.use("/api/ai-providers", aiProvidersRouter);
 
 const PORT = process.env.PORT || 8001;
 app.listen(PORT, () => {

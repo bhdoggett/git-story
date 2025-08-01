@@ -15,10 +15,11 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  githubId  String   @unique
-  name      String?
-  repos     Repo[]
+  id          String       @id @default(uuid())
+  githubId    String       @unique
+  name        String?
+  repos       Repo[]
+  aiProviders AIProvider[]
 }
 
 model Repo {
@@ -33,7 +34,7 @@ model Repo {
 
 model Story {
   id        String   @id @default(uuid())
-  repo      Repo     @relation(fields: [repoId], references: [id])
+  repo      Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
   repoId    String
   createdAt DateTime @default(now())
   chapters  Chapter[]
@@ -41,7 +42,7 @@ model Story {
 
 model Chapter {
   id          String   @id @default(uuid())
-  story       Story    @relation(fields: [storyId], references: [id])
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   storyId     String
   title       String?  // Generated title for the chapter
   summary     String   // AI-generated summary
@@ -49,4 +50,18 @@ model Chapter {
   commitShas  String[] // Array of commit SHAs in this chapter
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model AIProvider {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  provider    String   // "openai", "google", "claude", "perplexity"
+  name        String   // User-friendly name for the provider
+  apiKey      String   // Encrypted API key
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, provider])
 }

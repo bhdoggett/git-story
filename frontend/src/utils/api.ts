@@ -98,6 +98,30 @@ export const apiClient = {
     regenerateChapterSummary: (chapterId: string) =>
       api.post(`/api/stories/chapters/${chapterId}/regenerate-summary`),
   },
+
+  // AI Provider endpoints
+  aiProviders: {
+    // Get user's AI providers
+    getAll: () => api.get("/api/ai-providers"),
+
+    // Add new AI provider
+    add: (data: { provider: string; name: string; apiKey: string }) =>
+      api.post("/api/ai-providers", data),
+
+    // Update AI provider
+    update: (
+      providerId: string,
+      data: { name?: string; apiKey?: string; isActive?: boolean }
+    ) => api.put(`/api/ai-providers/${providerId}`, data),
+
+    // Delete AI provider
+    delete: (providerId: string) =>
+      api.delete(`/api/ai-providers/${providerId}`),
+
+    // Test AI provider connection
+    test: (providerId: string) =>
+      api.post(`/api/ai-providers/${providerId}/test`),
+  },
 };
 
 export default api;
