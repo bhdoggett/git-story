@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import axios from "axios";
 import { GeminiService } from "../lib/geminiService";
+import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 
 const router = Router();
 
@@ -16,292 +17,281 @@ try {
 }
 
 // Get user's GitHub repositories
-router.get("/github", async (req: Request, res: Response) => {
-  try {
-    // Check if user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
+router.get(
+  "/github",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // Fetch repositories from GitHub API
+      const response = await axios.get("https://api.github.com/user/repos", {
+        headers: {
+          Authorization: `token ${req.accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+        params: {
+          sort: "updated",
+          per_page: 100,
+        },
+      });
+
+      const repos = response.data.map((repo: any) => ({
+        id: repo.id,
+        name: repo.name,
+        full_name: repo.full_name,
+        description: repo.description,
+        private: repo.private,
+        html_url: repo.html_url,
+        updated_at: repo.updated_at,
+      }));
+
+      res.json(repos);
+    } catch (error) {
+      console.error("Error fetching repositories:", error);
+      res.status(500).json({ error: "Failed to fetch repositories" });
     }
-
-    const accessToken = req.session.accessToken;
-    if (!accessToken) {
-      return res.status(401).json({ error: "No access token found" });
-    }
-
-    // Fetch repositories from GitHub API
-    const response = await axios.get("https://api.github.com/user/repos", {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-      params: {
-        sort: "updated",
-        per_page: 100,
-      },
-    });
-
-    const repos = response.data.map((repo: any) => ({
-      id: repo.id,
-      name: repo.name,
-      full_name: repo.full_name,
-      description: repo.description,
-      private: repo.private,
-      html_url: repo.html_url,
-      updated_at: repo.updated_at,
-    }));
-
-    res.json(repos);
-  } catch (error) {
-    console.error("Error fetching repositories:", error);
-    res.status(500).json({ error: "Failed to fetch repositories" });
   }
-});
+);
 
 // Connect a repository to the user
-router.post("/connect", async (req: Request, res: Response) => {
-  try {
-    // Check if user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
+router.post(
+  "/connect",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { githubRepoId, name, full_name } = req.body;
+      const userId = req.session.userId;
+
+      if (!githubRepoId || !name) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Import prisma here to avoid circular dependencies
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
+
+      // Check if repo is already connected
+      const existingRepo = await prisma.repo.findFirst({
+        where: {
+          userId,
+          githubRepoId: githubRepoId.toString(),
+        },
+      });
+
+      if (existingRepo) {
+        return res.status(400).json({ error: "Repository already connected" });
+      }
+
+      // Create new repo connection - store full_name in the name field for now
+      const repo = await prisma.repo.create({
+        data: {
+          userId,
+          githubRepoId: githubRepoId.toString(),
+          name: full_name || name, // Store full_name if available, otherwise just name
+          narration: [],
+        },
+      });
+
+      res.json(repo);
+    } catch (error) {
+      console.error("Error connecting repository:", error);
+      res.status(500).json({ error: "Failed to connect repository" });
     }
-
-    const { githubRepoId, name, full_name } = req.body;
-    const userId = req.session.userId;
-
-    if (!githubRepoId || !name) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    // Import prisma here to avoid circular dependencies
-    const { PrismaClient } = require("../generated/prisma");
-    const prisma = new PrismaClient();
-
-    // Check if repo is already connected
-    const existingRepo = await prisma.repo.findFirst({
-      where: {
-        userId,
-        githubRepoId: githubRepoId.toString(),
-      },
-    });
-
-    if (existingRepo) {
-      return res.status(400).json({ error: "Repository already connected" });
-    }
-
-    // Create new repo connection - store full_name in the name field for now
-    const repo = await prisma.repo.create({
-      data: {
-        userId,
-        githubRepoId: githubRepoId.toString(),
-        name: full_name || name, // Store full_name if available, otherwise just name
-        narration: [],
-      },
-    });
-
-    res.json(repo);
-  } catch (error) {
-    console.error("Error connecting repository:", error);
-    res.status(500).json({ error: "Failed to connect repository" });
   }
-});
+);
 
 // Get user's connected repositories
-router.get("/connected", async (req: Request, res: Response) => {
-  try {
-    // Check if user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
+router.get(
+  "/connected",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.session.userId;
+
+      // Import prisma here to avoid circular dependencies
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
+
+      const repos = await prisma.repo.findMany({
+        where: { userId },
+        orderBy: { name: "asc" },
+      });
+
+      res.json(repos);
+    } catch (error) {
+      console.error("Error fetching connected repositories:", error);
+      res.status(500).json({ error: "Failed to fetch connected repositories" });
     }
-
-    const userId = req.session.userId;
-
-    // Import prisma here to avoid circular dependencies
-    const { PrismaClient } = require("../generated/prisma");
-    const prisma = new PrismaClient();
-
-    const repos = await prisma.repo.findMany({
-      where: { userId },
-      orderBy: { name: "asc" },
-    });
-
-    res.json(repos);
-  } catch (error) {
-    console.error("Error fetching connected repositories:", error);
-    res.status(500).json({ error: "Failed to fetch connected repositories" });
   }
-});
+);
 
 // Disconnect a repository
-router.delete("/:repoId", async (req: Request, res: Response) => {
-  try {
-    // Check if user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
+router.delete(
+  "/:repoId",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const repoId = req.params.repoId;
+      const userId = req.session.userId;
+
+      // Import prisma here to avoid circular dependencies
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
+
+      // Check if repo exists and belongs to user
+      const repo = await prisma.repo.findFirst({
+        where: {
+          id: repoId,
+          userId,
+        },
+      });
+
+      if (!repo) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Delete the repository
+      await prisma.repo.delete({
+        where: { id: repoId },
+      });
+
+      res.json({ message: "Repository disconnected successfully" });
+    } catch (error) {
+      console.error("Error disconnecting repository:", error);
+      res.status(500).json({ error: "Failed to disconnect repository" });
     }
-
-    const repoId = req.params.repoId;
-    const userId = req.session.userId;
-
-    // Import prisma here to avoid circular dependencies
-    const { PrismaClient } = require("../generated/prisma");
-    const prisma = new PrismaClient();
-
-    // Check if repo exists and belongs to user
-    const repo = await prisma.repo.findFirst({
-      where: {
-        id: repoId,
-        userId,
-      },
-    });
-
-    if (!repo) {
-      return res.status(404).json({ error: "Repository not found" });
-    }
-
-    // Delete the repository
-    await prisma.repo.delete({
-      where: { id: repoId },
-    });
-
-    res.json({ message: "Repository disconnected successfully" });
-  } catch (error) {
-    console.error("Error disconnecting repository:", error);
-    res.status(500).json({ error: "Failed to disconnect repository" });
   }
-});
+);
 
 // Get commit history for a connected repository
-router.get("/:repoId/commits", async (req: Request, res: Response) => {
-  try {
-    // Check if user is authenticated
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
+router.get(
+  "/:repoId/commits",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const repoId = req.params.repoId;
 
-    const accessToken = req.session.accessToken;
-    const repoId = req.params.repoId;
+      // Get repository info from database
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
 
-    if (!accessToken) {
-      return res.status(401).json({ error: "No access token found" });
-    }
+      const repo = await prisma.repo.findUnique({
+        where: { id: repoId },
+      });
 
-    // Get repository info from database
-    const { PrismaClient } = require("../generated/prisma");
-    const prisma = new PrismaClient();
+      if (!repo) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
 
-    const repo = await prisma.repo.findUnique({
-      where: { id: repoId },
-    });
+      // Check if user owns this repository
+      if (repo.userId !== req.session.userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
 
-    if (!repo) {
-      return res.status(404).json({ error: "Repository not found" });
-    }
+      // Use the full repository name stored in the database
+      const fullRepoName = repo.name; // This should now contain "owner/repo-name"
 
-    // Check if user owns this repository
-    if (repo.userId !== req.session.userId) {
-      return res.status(403).json({ error: "Not authorized" });
-    }
+      console.log("Fetching ALL commits for repo:", fullRepoName);
 
-    // Use the full repository name stored in the database
-    const fullRepoName = repo.name; // This should now contain "owner/repo-name"
-
-    console.log("Fetching ALL commits for repo:", fullRepoName);
-
-    // Fetch all commits from GitHub API using pagination
-    let allCommits: any[] = [];
-    let page = 1;
-    let keepFetching = true;
-    const perPage = 100;
-    while (keepFetching) {
-      const response = await axios.get(
-        `https://api.github.com/repos/${fullRepoName}/commits`,
-        {
-          headers: {
-            Authorization: `token ${accessToken}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-          params: {
-            per_page: perPage,
-            page,
-          },
-        }
-      );
-      if (response.data.length === 0) {
-        keepFetching = false;
-      } else {
-        allCommits = allCommits.concat(response.data);
-        page++;
-        if (response.data.length < perPage) {
+      // Fetch all commits from GitHub API using pagination
+      let allCommits: any[] = [];
+      let page = 1;
+      let keepFetching = true;
+      const perPage = 100;
+      while (keepFetching) {
+        const response = await axios.get(
+          `https://api.github.com/repos/${fullRepoName}/commits`,
+          {
+            headers: {
+              Authorization: `token ${req.accessToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+            params: {
+              per_page: perPage,
+              page,
+            },
+          }
+        );
+        if (response.data.length === 0) {
           keepFetching = false;
+        } else {
+          allCommits = allCommits.concat(response.data);
+          page++;
+          if (response.data.length < perPage) {
+            keepFetching = false;
+          }
         }
       }
+
+      // Fetch diffs for each commit (limit to first 200 for performance)
+      const commitsWithDiffs = await Promise.all(
+        allCommits.map(async (commit: any) => {
+          try {
+            // Get the diff for this commit
+            const diffResponse = await axios.get(
+              `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
+              {
+                headers: {
+                  Authorization: `token ${req.accessToken}`,
+                  Accept: "application/vnd.github.v3+json",
+                },
+              }
+            );
+
+            const files = diffResponse.data.files || [];
+            const diff = files.map((file: any) => ({
+              filename: file.filename,
+              status: file.status,
+              additions: file.additions,
+              deletions: file.deletions,
+              changes: file.changes,
+              patch: file.patch,
+            }));
+
+            return {
+              sha: commit.sha,
+              message: commit.commit.message,
+              author: commit.commit.author.name,
+              date: commit.commit.author.date,
+              url: commit.html_url,
+              diff,
+            };
+          } catch (error) {
+            console.error(
+              `Error fetching diff for commit ${commit.sha}:`,
+              error
+            );
+            return {
+              sha: commit.sha,
+              message: commit.commit.message,
+              author: commit.commit.author.name,
+              date: commit.commit.author.date,
+              url: commit.html_url,
+              diff: [],
+            };
+          }
+        })
+      );
+
+      console.log(
+        "Successfully fetched",
+        commitsWithDiffs.length,
+        "commits with diffs (out of",
+        allCommits.length,
+        "total commits)"
+      );
+      res.json(commitsWithDiffs);
+    } catch (error) {
+      console.error("Error fetching commits:", error);
+      res.status(500).json({ error: "Failed to fetch commits" });
     }
-
-    // Fetch diffs for each commit (limit to first 200 for performance)
-    const commitsWithDiffs = await Promise.all(
-      allCommits.map(async (commit: any) => {
-        try {
-          // Get the diff for this commit
-          const diffResponse = await axios.get(
-            `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
-            {
-              headers: {
-                Authorization: `token ${accessToken}`,
-                Accept: "application/vnd.github.v3+json",
-              },
-            }
-          );
-
-          const files = diffResponse.data.files || [];
-          const diff = files.map((file: any) => ({
-            filename: file.filename,
-            status: file.status,
-            additions: file.additions,
-            deletions: file.deletions,
-            changes: file.changes,
-            patch: file.patch,
-          }));
-
-          return {
-            sha: commit.sha,
-            message: commit.commit.message,
-            author: commit.commit.author.name,
-            date: commit.commit.author.date,
-            url: commit.html_url,
-            diff,
-          };
-        } catch (error) {
-          console.error(`Error fetching diff for commit ${commit.sha}:`, error);
-          return {
-            sha: commit.sha,
-            message: commit.commit.message,
-            author: commit.commit.author.name,
-            date: commit.commit.author.date,
-            url: commit.html_url,
-            diff: [],
-          };
-        }
-      })
-    );
-
-    console.log(
-      "Successfully fetched",
-      commitsWithDiffs.length,
-      "commits with diffs (out of",
-      allCommits.length,
-      "total commits)"
-    );
-    res.json(commitsWithDiffs);
-  } catch (error) {
-    console.error("Error fetching commits:", error);
-    res.status(500).json({ error: "Failed to fetch commits" });
   }
-});
+);
 
 // Analyze a specific commit with Gemini
 router.post(
   "/:repoId/commits/:commitSha/analyze",
-  async (req: Request, res: Response) => {
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       // Check if Gemini service is available
       if (!geminiService) {
@@ -311,18 +301,8 @@ router.post(
         });
       }
 
-      // Check if user is authenticated
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-
-      const accessToken = req.session.accessToken;
       const repoId = req.params.repoId;
       const commitSha = req.params.commitSha;
-
-      if (!accessToken) {
-        return res.status(401).json({ error: "No access token found" });
-      }
 
       // Get repository info from database
       const { PrismaClient } = require("../generated/prisma");
@@ -348,7 +328,7 @@ router.post(
         `https://api.github.com/repos/${fullRepoName}/commits/${commitSha}`,
         {
           headers: {
-            Authorization: `token ${accessToken}`,
+            Authorization: `token ${req.accessToken}`,
             Accept: "application/vnd.github.v3+json",
           },
         }
@@ -388,7 +368,8 @@ router.post(
 // Analyze multiple commits with Gemini
 router.post(
   "/:repoId/commits/analyze-batch",
-  async (req: Request, res: Response) => {
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       // Check if Gemini service is available
       if (!geminiService) {
@@ -398,18 +379,8 @@ router.post(
         });
       }
 
-      // Check if user is authenticated
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-
-      const accessToken = req.session.accessToken;
       const repoId = req.params.repoId;
       const { commitShas } = req.body; // Array of commit SHAs to analyze
-
-      if (!accessToken) {
-        return res.status(401).json({ error: "No access token found" });
-      }
 
       if (!commitShas || !Array.isArray(commitShas)) {
         return res.status(400).json({ error: "commitShas array is required" });
@@ -442,7 +413,7 @@ router.post(
               `https://api.github.com/repos/${fullRepoName}/commits/${sha}`,
               {
                 headers: {
-                  Authorization: `token ${accessToken}`,
+                  Authorization: `token ${req.accessToken}`,
                   Accept: "application/vnd.github.v3+json",
                 },
               }
