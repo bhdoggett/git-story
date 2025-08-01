@@ -389,4 +389,180 @@ router.post(
   }
 );
 
+// Update chapter title
+router.put(
+  "/chapters/:chapterId/title",
+  async (req: Request, res: Response) => {
+    try {
+      const { chapterId } = req.params;
+      const { title } = req.body;
+      const userId = req.session.userId;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      if (!title || title.trim() === "") {
+        return res.status(400).json({ error: "Title is required" });
+      }
+
+      const chapter = await prisma.chapter.findFirst({
+        where: { id: chapterId },
+        include: {
+          story: {
+            include: {
+              repo: true,
+            },
+          },
+        },
+      });
+
+      if (!chapter || chapter.story.repo.userId !== userId) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+
+      const updatedChapter = await prisma.chapter.update({
+        where: { id: chapterId },
+        data: { title: title.trim() },
+      });
+
+      res.json({
+        id: updatedChapter.id,
+        title: updatedChapter.title,
+        updatedAt: updatedChapter.updatedAt,
+      });
+    } catch (error) {
+      console.error("Error updating chapter title:", error);
+      res.status(500).json({ error: "Failed to update title" });
+    }
+  }
+);
+
+// Update chapter summary
+router.put(
+  "/chapters/:chapterId/summary",
+  async (req: Request, res: Response) => {
+    try {
+      const { chapterId } = req.params;
+      const { summary } = req.body;
+      const userId = req.session.userId;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      if (!summary || summary.trim() === "") {
+        return res.status(400).json({ error: "Summary is required" });
+      }
+
+      const chapter = await prisma.chapter.findFirst({
+        where: { id: chapterId },
+        include: {
+          story: {
+            include: {
+              repo: true,
+            },
+          },
+        },
+      });
+
+      if (!chapter || chapter.story.repo.userId !== userId) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+
+      const updatedChapter = await prisma.chapter.update({
+        where: { id: chapterId },
+        data: { summary: summary.trim() },
+      });
+
+      res.json({
+        id: updatedChapter.id,
+        summary: updatedChapter.summary,
+        updatedAt: updatedChapter.updatedAt,
+      });
+    } catch (error) {
+      console.error("Error updating chapter summary:", error);
+      res.status(500).json({ error: "Failed to update summary" });
+    }
+  }
+);
+
+// Get commit details for a chapter (for displaying diffs)
+router.get(
+  "/chapters/:chapterId/commits",
+  async (req: Request, res: Response) => {
+    try {
+      const { chapterId } = req.params;
+      const userId = req.session.userId;
+      const accessToken = req.session.accessToken;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      if (!accessToken) {
+        return res.status(401).json({ error: "No GitHub access token" });
+      }
+
+      const chapter = await prisma.chapter.findFirst({
+        where: { id: chapterId },
+        include: {
+          story: {
+            include: {
+              repo: true,
+            },
+          },
+        },
+      });
+
+      if (!chapter || chapter.story.repo.userId !== userId) {
+        return res.status(404).json({ error: "Chapter not found" });
+      }
+
+      // Fetch commit details from GitHub
+      const commits = [];
+      for (const sha of chapter.commitShas) {
+        try {
+          const response = await fetch(
+            `https://api.github.com/repos/${chapter.story.repo.name}/commits/${sha}`,
+            {
+              headers: {
+                Authorization: `token ${accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
+
+          if (response.ok) {
+            const commit = await response.json();
+            commits.push({
+              sha: commit.sha,
+              message: commit.commit.message,
+              author: commit.commit.author.name,
+              date: commit.commit.author.date,
+              url: commit.html_url,
+              diff:
+                commit.files?.map((file: any) => ({
+                  filename: file.filename,
+                  status: file.status,
+                  additions: file.additions,
+                  deletions: file.deletions,
+                  changes: file.changes,
+                  patch: file.patch,
+                })) || [],
+            });
+          }
+        } catch (error) {
+          console.error(`Error fetching commit ${sha}:`, error);
+        }
+      }
+
+      res.json({ commits });
+    } catch (error) {
+      console.error("Error fetching chapter commits:", error);
+      res.status(500).json({ error: "Failed to fetch commits" });
+    }
+  }
+);
+
 export default router;
