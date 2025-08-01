@@ -27,7 +27,6 @@ model Repo {
   userId       String
   githubRepoId String
   name         String
-  narration    String[] // Each index is a chapter
   stories      Story[]
 }
 
