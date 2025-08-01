@@ -32,11 +32,12 @@ model Repo {
 }
 
 model Story {
-  id        String   @id @default(uuid())
-  repo      Repo     @relation(fields: [repoId], references: [id])
-  repoId    String
-  createdAt DateTime @default(now())
-  chapters  Chapter[]
+  id            String   @id @default(uuid())
+  repo          Repo     @relation(fields: [repoId], references: [id])
+  repoId        String
+  globalContext String?  // User's global context for the story
+  createdAt     DateTime @default(now())
+  chapters      Chapter[]
 }
 
 model Chapter {

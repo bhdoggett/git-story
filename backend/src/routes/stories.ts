@@ -565,4 +565,66 @@ router.get(
   }
 );
 
+// Get global context for a story
+router.get("/story/:repoId/context", async (req: Request, res: Response) => {
+  try {
+    const { repoId } = req.params;
+    const userId = req.session.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const story = await prisma.story.findFirst({
+      where: { repoId },
+      include: {
+        repo: true,
+      },
+    });
+
+    if (!story || story.repo.userId !== userId) {
+      return res.status(404).json({ error: "Story not found" });
+    }
+
+    res.json({ globalContext: story.globalContext || "" });
+  } catch (error) {
+    console.error("Error fetching global context:", error);
+    res.status(500).json({ error: "Failed to fetch global context" });
+  }
+});
+
+// Update global context for a story
+router.put("/story/:repoId/context", async (req: Request, res: Response) => {
+  try {
+    const { repoId } = req.params;
+    const { globalContext } = req.body;
+    const userId = req.session.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const story = await prisma.story.findFirst({
+      where: { repoId },
+      include: {
+        repo: true,
+      },
+    });
+
+    if (!story || story.repo.userId !== userId) {
+      return res.status(404).json({ error: "Story not found" });
+    }
+
+    const updatedStory = await prisma.story.update({
+      where: { id: story.id },
+      data: { globalContext: globalContext || null },
+    });
+
+    res.json({ globalContext: updatedStory.globalContext || "" });
+  } catch (error) {
+    console.error("Error updating global context:", error);
+    res.status(500).json({ error: "Failed to update global context" });
+  }
+});
+
 export default router;
