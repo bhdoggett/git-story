@@ -7,13 +7,22 @@ interface ConnectedRepository {
   id: string;
   name: string;
   githubRepoId: string;
-  narration: string[];
+}
+
+interface Story {
+  id: string;
+  repoId: string;
+  chapters: Array<{
+    id: string;
+    title: string;
+  }>;
 }
 
 const StoriesList: React.FC = () => {
   const [connectedRepos, setConnectedRepos] = useState<ConnectedRepository[]>(
     []
   );
+  const [stories, setStories] = useState<{ [repoId: string]: Story }>({});
   const [loading, setLoading] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -30,6 +39,19 @@ const StoriesList: React.FC = () => {
     try {
       const response = await apiClient.repos.getConnected();
       setConnectedRepos(response.data);
+
+      // Fetch story data for each repository
+      const storyData: { [repoId: string]: Story } = {};
+      for (const repo of response.data) {
+        try {
+          const storyResponse = await apiClient.stories.getStory(repo.id);
+          storyData[repo.id] = storyResponse.data;
+        } catch (error) {
+          // Story doesn't exist yet, that's okay
+          console.log(`No story found for repo ${repo.id}`);
+        }
+      }
+      setStories(storyData);
     } catch (err) {
       console.error("Error fetching connected repositories:", err);
     } finally {
@@ -115,12 +137,18 @@ const StoriesList: React.FC = () => {
             <div className="flex-1">
               <h4 className="text-lg font-medium text-white">{repo.name}</h4>
               <p className="text-sm text-gray-400 mt-1">
-                {repo.narration.length > 0
-                  ? `${repo.narration.length} chapter${repo.narration.length !== 1 ? "s" : ""}`
+                {stories[repo.id]?.chapters?.length > 0
+                  ? `${stories[repo.id].chapters.length} chapter${stories[repo.id].chapters.length !== 1 ? "s" : ""}`
                   : "No chapters yet"}
               </p>
             </div>
             <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleGenerateStory(repo.id, repo.name)}
+                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-900/50 text-green-300 hover:bg-green-800/50 border border-green-700"
+              >
+                Story
+              </button>
               <button
                 onClick={() =>
                   setSelectedRepo(selectedRepo === repo.id ? null : repo.id)
@@ -129,12 +157,7 @@ const StoriesList: React.FC = () => {
               >
                 {selectedRepo === repo.id ? "Hide Commits" : "View Commits"}
               </button>
-              <button
-                onClick={() => handleGenerateStory(repo.id, repo.name)}
-                className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-900/50 text-green-300 hover:bg-green-800/50 border border-green-700"
-              >
-                Generate Story
-              </button>
+
               <button
                 onClick={() => disconnectRepository(repo.id)}
                 disabled={disconnecting === repo.id}

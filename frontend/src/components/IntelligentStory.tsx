@@ -1,5 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "../utils/api";
+import CommitDisplay from "./CommitDisplay";
+import { storyCache, calculateDateRange } from "../utils/indexedDB";
+
+interface DiffFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+}
+
+interface Commit {
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+  url: string;
+  diff: DiffFile[];
+  analysis?: string;
+}
 
 interface Chapter {
   id: string;
@@ -17,6 +38,9 @@ interface Story {
   repoId: string;
   createdAt: string;
   chapters: Chapter[];
+  repoName?: string;
+  lastUpdated?: number;
+  expiresAt?: number;
 }
 
 interface IntelligentStoryProps {
@@ -35,6 +59,14 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     [chapterId: string]: string;
   }>({});
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [editingSummary, setEditingSummary] = useState<string | null>(null);
+  const [chapterCommits, setChapterCommits] = useState<{
+    [chapterId: string]: Commit[];
+  }>({});
+  const [loadingCommits, setLoadingCommits] = useState<{
+    [chapterId: string]: boolean;
+  }>({});
 
   useEffect(() => {
     fetchStory();
@@ -43,6 +75,35 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const fetchStory = async () => {
     setLoading(true);
     try {
+      // Try to get from cache first
+      const cachedStory = await storyCache.getStory(repoId);
+
+      if (cachedStory) {
+        setStory(cachedStory);
+
+        // Initialize notes state
+        const notes: { [chapterId: string]: string } = {};
+        cachedStory.chapters.forEach((chapter: Chapter) => {
+          notes[chapter.id] = chapter.userNotes || "";
+        });
+        setChapterNotes(notes);
+
+        // Load cached commit data
+        for (const chapter of cachedStory.chapters) {
+          const cachedCommits = await storyCache.getChapterCommits(chapter.id);
+          if (cachedCommits) {
+            setChapterCommits((prev) => ({
+              ...prev,
+              [chapter.id]: cachedCommits.commits,
+            }));
+          }
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      // If not in cache, fetch from API
       const response = await apiClient.stories.getStory(repoId);
       setStory(response.data);
 
@@ -52,6 +113,37 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
         notes[chapter.id] = chapter.userNotes || "";
       });
       setChapterNotes(notes);
+
+      // Fetch commit data for all chapters to display date ranges
+      for (const chapter of response.data.chapters) {
+        try {
+          const commitResponse = await apiClient.stories.getChapterCommits(
+            chapter.id
+          );
+          const commits = commitResponse.data.commits;
+
+          setChapterCommits((prev) => ({
+            ...prev,
+            [chapter.id]: commits,
+          }));
+
+          // Cache the commit data
+          await storyCache.setChapterCommits(chapter.id, commits);
+        } catch (error) {
+          console.error(
+            `Error fetching commits for chapter ${chapter.id}:`,
+            error
+          );
+        }
+      }
+
+      // Cache the story data
+      await storyCache.setStory({
+        ...response.data,
+        repoName,
+        lastUpdated: Date.now(),
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      });
     } catch (error) {
       console.error("Error fetching story:", error);
       // Story doesn't exist yet, that's okay
@@ -72,6 +164,28 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
         notes[chapter.id] = chapter.userNotes || "";
       });
       setChapterNotes(notes);
+
+      // Fetch commit data for all chapters to display date ranges
+      for (const chapter of response.data.chapters) {
+        try {
+          const commitResponse = await apiClient.stories.getChapterCommits(
+            chapter.id
+          );
+          const commits = commitResponse.data.commits;
+          setChapterCommits((prev) => ({
+            ...prev,
+            [chapter.id]: commits,
+          }));
+
+          // Cache the commit data
+          await storyCache.setChapterCommits(chapter.id, commits);
+        } catch (error) {
+          console.error(
+            `Error fetching commits for chapter ${chapter.id}:`,
+            error
+          );
+        }
+      }
     } catch (error) {
       console.error("Error generating chapters:", error);
       alert("Failed to generate chapters. Please try again.");
@@ -87,6 +201,44 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     } catch (error) {
       console.error("Error updating chapter notes:", error);
       alert("Failed to save notes. Please try again.");
+    }
+  };
+
+  const updateChapterTitle = async (chapterId: string, title: string) => {
+    try {
+      await apiClient.stories.updateChapterTitle(chapterId, title);
+      setStory((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          chapters: prev.chapters.map((chapter) =>
+            chapter.id === chapterId ? { ...chapter, title } : chapter
+          ),
+        };
+      });
+      setEditingTitle(null);
+    } catch (error) {
+      console.error("Error updating chapter title:", error);
+      alert("Failed to save title. Please try again.");
+    }
+  };
+
+  const updateChapterSummary = async (chapterId: string, summary: string) => {
+    try {
+      await apiClient.stories.updateChapterSummary(chapterId, summary);
+      setStory((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          chapters: prev.chapters.map((chapter) =>
+            chapter.id === chapterId ? { ...chapter, summary } : chapter
+          ),
+        };
+      });
+      setEditingSummary(null);
+    } catch (error) {
+      console.error("Error updating chapter summary:", error);
+      alert("Failed to save summary. Please try again.");
     }
   };
 
@@ -113,6 +265,40 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
       alert("Failed to regenerate summary. Please try again.");
     } finally {
       setRegenerating(null);
+    }
+  };
+
+  const fetchChapterCommits = async (chapterId: string) => {
+    if (chapterCommits[chapterId]) return; // Already loaded
+
+    setLoadingCommits((prev) => ({ ...prev, [chapterId]: true }));
+    try {
+      // Try to get from cache first
+      const cachedCommits = await storyCache.getChapterCommits(chapterId);
+      if (cachedCommits) {
+        setChapterCommits((prev) => ({
+          ...prev,
+          [chapterId]: cachedCommits.commits,
+        }));
+        setLoadingCommits((prev) => ({ ...prev, [chapterId]: false }));
+        return;
+      }
+
+      // If not in cache, fetch from API
+      const response = await apiClient.stories.getChapterCommits(chapterId);
+      const commits = response.data.commits;
+
+      setChapterCommits((prev) => ({
+        ...prev,
+        [chapterId]: commits,
+      }));
+
+      // Cache the commit data
+      await storyCache.setChapterCommits(chapterId, commits);
+    } catch (error) {
+      console.error("Error fetching chapter commits:", error);
+    } finally {
+      setLoadingCommits((prev) => ({ ...prev, [chapterId]: false }));
     }
   };
 
@@ -163,13 +349,66 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
               {/* Chapter Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex-1">
-                  <h4 className="text-lg font-medium text-white">
-                    {chapter.title || `Chapter ${index + 1}`}
-                  </h4>
+                  {editingTitle === chapter.id ? (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-lg font-medium text-gray-400">
+                        Chapter {index + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={chapter.title}
+                        onChange={(e) => {
+                          setStory((prev) => {
+                            if (!prev) return null;
+                            return {
+                              ...prev,
+                              chapters: prev.chapters.map((c) =>
+                                c.id === chapter.id
+                                  ? { ...c, title: e.target.value }
+                                  : c
+                              ),
+                            };
+                          });
+                        }}
+                        onBlur={() =>
+                          updateChapterTitle(chapter.id, chapter.title)
+                        }
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            updateChapterTitle(chapter.id, chapter.title);
+                          }
+                        }}
+                        className="text-lg font-medium text-white bg-gray-700 border border-gray-600 rounded px-2 py-1 focus:outline-none focus:border-blue-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => setEditingTitle(null)}
+                        className="text-gray-400 hover:text-gray-300"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <h4
+                      className="text-lg font-medium text-white cursor-pointer hover:text-blue-300"
+                      onClick={() => setEditingTitle(chapter.id)}
+                    >
+                      <span className="text-gray-400 mr-2">
+                        Chapter {index + 1}
+                      </span>
+                      {chapter.title || `Chapter ${index + 1}`}
+                    </h4>
+                  )}
                   <p className="text-sm text-gray-400 mt-1">
                     {chapter.commitCount} commit
-                    {chapter.commitCount !== 1 ? "s" : ""} • Created{" "}
-                    {new Date(chapter.createdAt).toLocaleDateString()}
+                    {chapter.commitCount !== 1 ? "s" : ""} •{" "}
+                    {(() => {
+                      const commits = chapterCommits[chapter.id];
+                      if (commits && commits.length > 0) {
+                        return calculateDateRange(commits);
+                      }
+                      return "Loading dates...";
+                    })()}
                   </p>
                 </div>
                 <button
@@ -191,13 +430,62 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
               {/* Chapter Summary */}
               <div className="mb-4">
                 <h5 className="text-sm font-medium text-gray-300 mb-2">
-                  AI Summary
+                  Summary
                 </h5>
-                <div className="bg-gray-900 border border-gray-600 rounded p-3">
-                  <p className="text-gray-200 text-sm leading-relaxed">
-                    {chapter.summary}
-                  </p>
-                </div>
+                {editingSummary === chapter.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={chapter.summary}
+                      onChange={(e) => {
+                        setStory((prev) => {
+                          if (!prev) return null;
+                          return {
+                            ...prev,
+                            chapters: prev.chapters.map((c) =>
+                              c.id === chapter.id
+                                ? { ...c, summary: e.target.value }
+                                : c
+                            ),
+                          };
+                        });
+                      }}
+                      onBlur={() =>
+                        updateChapterSummary(chapter.id, chapter.summary)
+                      }
+                      className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
+                      rows={4}
+                      autoFocus
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => setEditingSummary(null)}
+                        className="text-gray-400 hover:text-gray-300 text-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() =>
+                          updateChapterSummary(chapter.id, chapter.summary)
+                        }
+                        className="text-blue-400 hover:text-blue-300 text-sm"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="bg-gray-900 border border-gray-600 rounded p-3 cursor-pointer hover:border-gray-500"
+                    onClick={() => setEditingSummary(chapter.id)}
+                  >
+                    <p className="text-gray-200 text-sm leading-relaxed">
+                      {chapter.summary}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Click to edit summary
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Commit List */}
@@ -205,18 +493,56 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
                 <h5 className="text-sm font-medium text-gray-300 mb-2">
                   Included Commits ({chapter.commitCount})
                 </h5>
-                <div className="bg-gray-900 border border-gray-600 rounded p-3 max-h-32 overflow-y-auto">
-                  <div className="space-y-1">
-                    {chapter.commitShas.map((sha, idx) => (
-                      <div
-                        key={sha}
-                        className="text-xs text-gray-400 font-mono"
-                      >
-                        {sha.slice(0, 7)}...
-                      </div>
-                    ))}
+                {loadingCommits[chapter.id] ? (
+                  <div className="flex justify-center items-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
                   </div>
-                </div>
+                ) : chapterCommits[chapter.id] ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          setChapterCommits((prev) => {
+                            const newCommits = { ...prev };
+                            delete newCommits[chapter.id];
+                            return newCommits;
+                          });
+                        }}
+                        className="text-gray-400 hover:text-gray-300 text-sm font-medium"
+                      >
+                        Hide Details
+                      </button>
+                    </div>
+                    <CommitDisplay
+                      commits={chapterCommits[chapter.id]}
+                      showAnalysis={false}
+                      showGitHubLink={true}
+                      showExpandButton={true}
+                      className="max-h-96 overflow-y-auto"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-gray-900 border border-gray-600 rounded p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        {chapter.commitShas.map((sha, idx) => (
+                          <div
+                            key={sha}
+                            className="text-xs text-gray-400 font-mono"
+                          >
+                            {sha.slice(0, 7)}...
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => fetchChapterCommits(chapter.id)}
+                        className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                      >
+                        Load Details
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* User Notes */}

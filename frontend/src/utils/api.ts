@@ -94,9 +94,21 @@ export const apiClient = {
     updateChapterNotes: (chapterId: string, userNotes: string) =>
       api.put(`/api/stories/chapters/${chapterId}/notes`, { userNotes }),
 
+    // Update chapter title
+    updateChapterTitle: (chapterId: string, title: string) =>
+      api.put(`/api/stories/chapters/${chapterId}/title`, { title }),
+
+    // Update chapter summary
+    updateChapterSummary: (chapterId: string, summary: string) =>
+      api.put(`/api/stories/chapters/${chapterId}/summary`, { summary }),
+
     // Regenerate chapter summary
     regenerateChapterSummary: (chapterId: string) =>
       api.post(`/api/stories/chapters/${chapterId}/regenerate-summary`),
+
+    // Get commit details for a chapter
+    getChapterCommits: (chapterId: string) =>
+      api.get(`/api/stories/chapters/${chapterId}/commits`),
   },
 };
 
