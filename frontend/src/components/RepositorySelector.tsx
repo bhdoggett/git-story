@@ -167,7 +167,7 @@ const RepositorySelector: React.FC = () => {
 
       {/* Available Repositories */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
           <h3 className="text-lg font-medium text-white">
             Available Repositories
           </h3>
@@ -177,7 +177,7 @@ const RepositorySelector: React.FC = () => {
               placeholder="Search repositories..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-900 border border-gray-600 text-white rounded-md px-3 py-2 pl-10 text-sm focus:outline-none focus:border-blue-500 w-64"
+              className="bg-gray-900 border border-gray-600 text-white rounded-md px-3 py-2 pl-10 text-sm focus:outline-none focus:border-blue-500 w-full sm:w-64"
             />
             <svg
               className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
@@ -227,9 +227,9 @@ const RepositorySelector: React.FC = () => {
                   key={repo.id}
                   className="bg-gray-800 border border-gray-700 rounded-lg p-4"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h4 className="text-sm font-medium text-white">
                           {repo.name}
                         </h4>
@@ -248,7 +248,7 @@ const RepositorySelector: React.FC = () => {
                         Updated {new Date(repo.updated_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="ml-4">
+                    <div>
                       {connected ? (
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
                           Connected

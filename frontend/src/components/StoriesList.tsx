@@ -142,7 +142,7 @@ const StoriesList: React.FC = () => {
           key={repo.id}
           className="bg-gray-800 border border-gray-700 rounded-lg p-6"
         >
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
             <div className="flex-1">
               <h4 className="text-lg font-medium text-white">{repo.name}</h4>
               <p className="text-sm text-gray-400 mt-1">
@@ -151,7 +151,7 @@ const StoriesList: React.FC = () => {
                   : "No chapters yet"}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleGenerateStory(repo.id, repo.name)}
                 className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-900/50 text-green-300 hover:bg-green-800/50 border border-green-700"

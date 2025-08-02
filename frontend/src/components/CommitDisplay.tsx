@@ -101,18 +101,18 @@ const CommitDisplay: React.FC<CommitDisplayProps> = ({
           key={commit.sha}
           className="bg-gray-800 border border-gray-700 rounded-lg p-4"
         >
-          <div className="flex items-start justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 gap-3">
             <div className="flex-1">
               <h4 className="text-sm font-medium text-white mb-1">
                 {commit.message.split("\n")[0]}
               </h4>
-              <div className="flex items-center space-x-4 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
                 <span>{commit.author}</span>
                 <span>{new Date(commit.date).toLocaleDateString()}</span>
                 <span className="font-mono">{commit.sha.substring(0, 7)}</span>
               </div>
             </div>
-            <div className="ml-4 flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               {showExpandButton && (
                 <button
                   onClick={() => toggleExpanded(commit.sha)}

@@ -188,15 +188,15 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h3 className="text-lg font-medium text-white">
           Commit History - {repoName}
         </h3>
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={analyzeAllCommits}
             disabled={analyzingBatch || commits.length === 0}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center space-x-2"
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center gap-2"
           >
             {analyzingBatch ? (
               <>
@@ -234,12 +234,12 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
             key={commit.sha}
             className="bg-gray-800 border border-gray-700 rounded-lg p-4"
           >
-            <div className="flex items-start justify-between mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-3 gap-3">
               <div className="flex-1">
                 <h4 className="text-sm font-medium text-white mb-1">
                   {commit.message.split("\n")[0]}
                 </h4>
-                <div className="flex items-center space-x-4 text-xs text-gray-400">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400">
                   <span>{commit.author}</span>
                   <span>{new Date(commit.date).toLocaleDateString()}</span>
                   <span className="font-mono">
@@ -247,7 +247,7 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
                   </span>
                 </div>
               </div>
-              <div className="ml-4 flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => analyzeCommit(commit.sha)}
                   disabled={analyzingCommit === commit.sha || !!commit.analysis}

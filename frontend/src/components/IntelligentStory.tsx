@@ -431,7 +431,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h3 className="text-xl font-semibold text-white">
             Story for {repoName}
@@ -440,7 +440,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
             AI-powered chapter generation based on commit themes
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={generateChapters}
             disabled={generating}
