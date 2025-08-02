@@ -8,12 +8,17 @@ const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // Helper function to analyze commits and group them by themes
-async function analyzeAndGroupCommits(commits: any[]) {
+async function analyzeAndGroupCommits(commits: any[], globalContext?: string) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const contextSection = globalContext
+    ? `\n\nProject Context:\n${globalContext}\n\nUse this context to better understand the project's goals, technologies, and development patterns when grouping commits.`
+    : "";
 
   const prompt = `
   Analyze these Git commits and group them into logical chapters based on themes, features, or contributions.
   Each group should represent a coherent development effort or feature implementation.
+  ${contextSection}
   
   Commits:
   ${commits
@@ -76,11 +81,20 @@ async function analyzeAndGroupCommits(commits: any[]) {
 }
 
 // Helper function to generate chapter summary
-async function generateChapterSummary(commits: any[], chapterTitle: string) {
+async function generateChapterSummary(
+  commits: any[],
+  chapterTitle: string,
+  globalContext?: string
+) {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const contextSection = globalContext
+    ? `\n\nProject Context:\n${globalContext}\n\nUse this context to provide more relevant and contextual summaries that align with the project's goals and technologies.`
+    : "";
 
   const prompt = `
   Generate a clear, layman-friendly summary of this Git chapter: "${chapterTitle}"
+  ${contextSection}
   
   Commits in this chapter:
   ${commits
@@ -120,6 +134,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { repoId } = req.params;
+      const { globalContext } = req.body;
       const userId = req.session.userId;
 
       if (!userId) {
@@ -161,7 +176,10 @@ router.post(
       const commits = await githubResponse.json();
 
       // Analyze and group commits
-      const chapterGroups = await analyzeAndGroupCommits(commits);
+      const chapterGroups = await analyzeAndGroupCommits(
+        commits,
+        globalContext
+      );
 
       // Create or update story
       let story = await prisma.story.findFirst({
@@ -171,13 +189,20 @@ router.post(
 
       if (!story) {
         story = await prisma.story.create({
-          data: { repoId },
+          data: {
+            repoId,
+            globalContext: globalContext || null,
+          },
           include: { chapters: true },
         });
       } else {
-        // Clear existing chapters
+        // Clear existing chapters and update global context
         await prisma.chapter.deleteMany({
           where: { storyId: story.id },
+        });
+        await prisma.story.update({
+          where: { id: story.id },
+          data: { globalContext: globalContext || null },
         });
       }
 
@@ -189,7 +214,8 @@ router.post(
         );
         const summary = await generateChapterSummary(
           chapterCommits,
-          group.title
+          group.title,
+          globalContext
         );
 
         const chapter = await prisma.chapter.create({

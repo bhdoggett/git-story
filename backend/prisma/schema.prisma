@@ -27,12 +27,12 @@ model Repo {
   userId       String
   githubRepoId String
   name         String
-  stories      Story[]
+  stories      Story[]  @relation("RepoStories")
 }
 
 model Story {
   id            String   @id @default(uuid())
-  repo          Repo     @relation(fields: [repoId], references: [id])
+  repo          Repo     @relation("RepoStories", fields: [repoId], references: [id], onDelete: Cascade)
   repoId        String
   globalContext String?  // User's global context for the story
   createdAt     DateTime @default(now())
@@ -41,7 +41,7 @@ model Story {
 
 model Chapter {
   id          String   @id @default(uuid())
-  story       Story    @relation(fields: [storyId], references: [id])
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   storyId     String
   title       String?  // Generated title for the chapter
   summary     String   // AI-generated summary

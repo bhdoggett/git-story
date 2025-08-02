@@ -87,7 +87,6 @@ router.post(
           userId,
           githubRepoId: githubRepoId.toString(),
           name: full_name || name, // Store full_name if available, otherwise just name
-          narration: [],
         },
       });
 
