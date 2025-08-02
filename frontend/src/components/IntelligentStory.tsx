@@ -336,6 +336,56 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     }
   };
 
+  const exportStory = () => {
+    if (!story || story.chapters.length === 0) return;
+
+    // Create the story content
+    let content = `STORY: ${repoName}\n`;
+    content += `Generated on: ${new Date().toLocaleDateString()}\n`;
+    content += `\n${"=".repeat(50)}\n\n`;
+
+    // Add global context if available
+    if (globalContext) {
+      content += `PROJECT CONTEXT:\n${globalContext}\n\n${"=".repeat(50)}\n\n`;
+    }
+
+    // Add chapters
+    story.chapters.forEach((chapter, index) => {
+      content += `CHAPTER ${index + 1}: ${chapter.title || `Chapter ${index + 1}`}\n`;
+      content += `${"-".repeat(40)}\n\n`;
+
+      // Add chapter summary
+      content += `SUMMARY:\n${chapter.summary}\n\n`;
+
+      // Add user notes if available
+      if (chapterNotes[chapter.id]) {
+        content += `USER NOTES:\n${chapterNotes[chapter.id]}\n\n`;
+      }
+
+      // Add commit information
+      content += `COMMITS: ${chapter.commitCount} commit${chapter.commitCount !== 1 ? "s" : ""}\n`;
+
+      // Add date range if available
+      const commits = chapterCommits[chapter.id];
+      if (commits && commits.length > 0) {
+        content += `DATE RANGE: ${calculateDateRange(commits)}\n`;
+      }
+
+      content += `\n${"=".repeat(50)}\n\n`;
+    });
+
+    // Create and download the file
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${repoName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_story.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const fetchChapterCommits = async (chapterId: string) => {
     if (chapterCommits[chapterId]) return; // Already loaded
 
@@ -390,20 +440,44 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
             AI-powered chapter generation based on commit themes
           </p>
         </div>
-        <button
-          onClick={generateChapters}
-          disabled={generating}
-          className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generating ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Generating Chapters...
-            </>
-          ) : (
-            "Generate Chapters"
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={generateChapters}
+            disabled={generating}
+            className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Generating Chapters...
+              </>
+            ) : (
+              "Generate Chapters"
+            )}
+          </button>
+
+          {story && story.chapters.length > 0 && (
+            <button
+              onClick={exportStory}
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+            >
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              Export Story
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Global Context Section */}
