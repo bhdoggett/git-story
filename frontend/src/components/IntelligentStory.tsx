@@ -67,7 +67,11 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const [loadingCommits, setLoadingCommits] = useState<{
     [chapterId: string]: boolean;
   }>({});
-  const [globalContext, setGlobalContext] = useState<string>("");
+  const [globalContext, setGlobalContext] = useState<string>(() => {
+    // Initialize from localStorage if available
+    const saved = localStorage.getItem(`globalContext_${repoId}`);
+    return saved || "";
+  });
   const [editingGlobalContext, setEditingGlobalContext] =
     useState<boolean>(false);
   const [savingContext, setSavingContext] = useState<boolean>(false);
@@ -303,7 +307,10 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const fetchGlobalContext = async () => {
     try {
       const response = await apiClient.stories.getGlobalContext(repoId);
-      setGlobalContext(response.data.globalContext);
+      const context = response.data.globalContext;
+      setGlobalContext(context);
+      // Update localStorage with the fetched context
+      localStorage.setItem(`globalContext_${repoId}`, context);
     } catch (error) {
       console.error("Error fetching global context:", error);
       // Story might not exist yet, that's okay
@@ -317,8 +324,9 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
       if (story) {
         await apiClient.stories.updateGlobalContext(repoId, context);
       }
-      // Always update local state
+      // Always update local state and localStorage
       setGlobalContext(context);
+      localStorage.setItem(`globalContext_${repoId}`, context);
       setEditingGlobalContext(false);
     } catch (error) {
       console.error("Error updating global context:", error);
@@ -413,7 +421,12 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
           <div className="space-y-3">
             <textarea
               value={globalContext}
-              onChange={(e) => setGlobalContext(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setGlobalContext(value);
+                // Save to localStorage immediately as user types
+                localStorage.setItem(`globalContext_${repoId}`, value);
+              }}
               className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
               rows={4}
               placeholder="Tell us about your project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
