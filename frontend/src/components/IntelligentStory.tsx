@@ -162,16 +162,25 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const generateChapters = async () => {
     setGenerating(true);
     try {
-      const response = await apiClient.stories.generateChapters(repoId);
+      // Pass global context to the API
+      const response = await apiClient.stories.generateChapters(
+        repoId,
+        globalContext
+      );
       setStory(response.data);
 
       // Cache the story data
-      await storyCache.setStory({
-        ...response.data,
-        repoName,
-        lastUpdated: Date.now(),
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-      });
+      try {
+        await storyCache.setStory({
+          ...response.data,
+          repoName,
+          lastUpdated: Date.now(),
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        });
+      } catch (cacheError) {
+        console.error("Error caching story data:", cacheError);
+        // Don't fail the whole operation for cache errors
+      }
 
       // Initialize notes state
       const notes: { [chapterId: string]: string } = {};
@@ -193,7 +202,15 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
           }));
 
           // Cache the commit data
-          await storyCache.setChapterCommits(chapter.id, commits);
+          try {
+            await storyCache.setChapterCommits(chapter.id, commits);
+          } catch (cacheError) {
+            console.error(
+              `Error caching commits for chapter ${chapter.id}:`,
+              cacheError
+            );
+            // Don't fail the whole operation for cache errors
+          }
         } catch (error) {
           console.error(
             `Error fetching commits for chapter ${chapter.id}:`,
@@ -296,7 +313,11 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const updateGlobalContext = async (context: string) => {
     setSavingContext(true);
     try {
-      await apiClient.stories.updateGlobalContext(repoId, context);
+      // If story exists, save to database immediately
+      if (story) {
+        await apiClient.stories.updateGlobalContext(repoId, context);
+      }
+      // Always update local state
       setGlobalContext(context);
       setEditingGlobalContext(false);
     } catch (error) {

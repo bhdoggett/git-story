@@ -60,6 +60,15 @@ const StoriesList: React.FC = () => {
   };
 
   const disconnectRepository = async (repoId: string) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      "This action will delete all story data for this repo. Are you sure?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     setDisconnecting(repoId);
     try {
       await apiClient.repos.disconnect(repoId);

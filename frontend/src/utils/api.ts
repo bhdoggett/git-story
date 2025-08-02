@@ -84,8 +84,8 @@ export const apiClient = {
   // Story endpoints
   stories: {
     // Generate intelligent chapters for a repository
-    generateChapters: (repoId: string) =>
-      api.post(`/api/stories/generate-chapters/${repoId}`),
+    generateChapters: (repoId: string, globalContext?: string) =>
+      api.post(`/api/stories/generate-chapters/${repoId}`, { globalContext }),
 
     // Get story with chapters
     getStory: (repoId: string) => api.get(`/api/stories/story/${repoId}`),
