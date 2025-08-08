@@ -165,23 +165,33 @@ const CommitDisplay: React.FC<CommitDisplayProps> = ({
           <div className="mb-3">
             <div className="flex flex-wrap gap-2">
               {commit.diff.map((file, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <span
-                    className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(file.status)}`}
-                  >
-                    {file.status}
-                  </span>
-                  <span className="text-xs text-gray-400">{file.filename}</span>
-                  {file.additions > 0 && (
-                    <span className="text-xs text-green-400">
-                      +{file.additions}
+                <div
+                  key={index}
+                  className="flex flex-row sm:flex-col items-center space-x-2"
+                >
+                  <div>
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-medium border overflow-ellipsis ${getStatusColor(file.status)}`}
+                    >
+                      {file.status}
                     </span>
-                  )}
-                  {file.deletions > 0 && (
-                    <span className="text-xs text-red-400">
-                      -{file.deletions}
+
+                    <span className="text-xs text-gray-400">
+                      {file.filename}
                     </span>
-                  )}
+                  </div>
+                  <div className="flex flex-row">
+                    {file.additions > 0 && (
+                      <span className="text-xs text-green-400">
+                        +{file.additions}
+                      </span>
+                    )}
+                    {file.deletions > 0 && (
+                      <span className="text-xs text-red-400">
+                        -{file.deletions}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
