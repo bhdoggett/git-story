@@ -7,6 +7,9 @@ import {
 } from "react-router-dom";
 import LoginPage from "./components/LoginPage";
 import Dashboard from "./components/Dashboard";
+import TermsOfService from "./components/TermsOfService";
+import PrivacyPolicy from "./components/PrivacyPolicy";
+import StatusPage from "./components/StatusPage";
 import { useUserStore } from "./stores/userStore";
 import { apiClient } from "./utils/api";
 
@@ -75,6 +78,9 @@ const App: React.FC = () => {
           path="/dashboard"
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
         />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/status" element={<StatusPage />} />
         <Route
           path="/"
           element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />}

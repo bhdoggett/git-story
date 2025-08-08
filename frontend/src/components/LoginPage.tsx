@@ -73,14 +73,14 @@ const LoginPage: React.FC = () => {
               <p className="text-sm text-gray-400 leading-relaxed">
                 By continuing, you agree to our{" "}
                 <a
-                  href="#"
+                  href="/terms"
                   className="text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   terms of service
                 </a>{" "}
                 and{" "}
                 <a
-                  href="#"
+                  href="/privacy"
                   className="text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   privacy policy
@@ -93,6 +93,14 @@ const LoginPage: React.FC = () => {
         {/* Footer */}
         <div className="text-center mt-8">
           <p className="text-gray-500 text-sm">Built with ❤️ for developers</p>
+          <div className="mt-4">
+            <a
+              href="/status"
+              className="text-gray-500 hover:text-gray-400 transition-colors text-xs"
+            >
+              Service Status
+            </a>
+          </div>
         </div>
       </div>
     </div>

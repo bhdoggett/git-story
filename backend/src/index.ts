@@ -18,12 +18,18 @@ app.use(cors({ origin: CLIENT_BASE_URL, credentials: true }));
 app.use(express.json());
 
 // --- Session middleware ---
+const isProduction = process.env.NODE_ENV === "production";
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }, // Set to true if using HTTPS
+    cookie: {
+      secure: isProduction, // true in production, false in development
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
   })
 );
 
@@ -54,6 +60,16 @@ passport.use(
     }
   )
 );
+
+// Health check endpoint
+app.get("/health", (req: Request, res: Response) => {
+  res.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || "development",
+  });
+});
 
 app.use("/auth", authRouter);
 app.use("/api/repos", reposRouter);
