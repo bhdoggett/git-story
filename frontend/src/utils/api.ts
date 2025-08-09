@@ -90,6 +90,14 @@ export const apiClient = {
     // Get story with chapters
     getStory: (repoId: string) => api.get(`/api/stories/story/${repoId}`),
 
+    // New: Check for more recent commits for a story
+    checkStoryUpdates: (repoId: string) =>
+      api.get(`/api/stories/story/${repoId}/check-updates`),
+
+    // New: On-demand AI analysis of pending updates (no modifications)
+    analyzeStoryUpdates: (repoId: string) =>
+      api.post(`/api/stories/story/${repoId}/analyze-updates`),
+
     // Update chapter notes
     updateChapterNotes: (chapterId: string, userNotes: string) =>
       api.put(`/api/stories/chapters/${chapterId}/notes`, { userNotes }),
