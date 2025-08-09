@@ -401,9 +401,8 @@ router.get(
         return res.json({
           hasNewCommits: hasAnyCommits,
           newCommitCount: hasAnyCommits ? undefined : 0,
-          decision: null,
           annotation: hasAnyCommits
-            ? "New commits available. Generate a story to include them."
+            ? "There are commits in this repository. Generate a story to include them."
             : "No commits found for this repository.",
         });
       }
@@ -418,12 +417,98 @@ router.get(
         }
       }
 
-      // Fetch latest commits (first N pages until we either see a known SHA or reach limit)
+      // Fetch latest commits (until a known SHA or cap), only counting
       let page = 1;
       const perPage = 100;
-      let newCommits: any[] = [];
+      let newCount = 0;
       let stop = false;
       while (!stop && page <= 3) { // hard cap 300 for responsiveness
+        const resp = await fetch(
+          `https://api.github.com/repos/${fullRepoName}/commits?per_page=${perPage}&page=${page}`,
+          {
+            headers: {
+              Authorization: `token ${accessToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+          }
+        );
+        if (!resp.ok) break;
+        const batch = await resp.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        for (const c of batch) {
+          if (knownShas.has(c.sha)) {
+            stop = true;
+            break;
+          }
+          newCount += 1;
+        }
+        if (batch.length < perPage) break;
+        page += 1;
+      }
+
+      if (newCount === 0) {
+        return res.json({
+          hasNewCommits: false,
+          newCommitCount: 0,
+          annotation: "Up to date",
+        });
+      }
+
+      return res.json({
+        hasNewCommits: true,
+        newCommitCount: newCount,
+        annotation: `There are ${newCount} new commits available.`,
+      });
+    } catch (error) {
+      console.error("Error checking for story updates:", error);
+      res.status(500).json({ error: "Failed to check for updates" });
+    }
+  }
+);
+
+// New: On-demand AI analysis of new commits vs last chapter (no DB modifications)
+router.post(
+  "/story/:repoId/analyze-updates",
+  async (req: Request, res: Response) => {
+    try {
+      const { repoId } = req.params;
+      const userId = req.session.userId;
+      const accessToken = (req as any).session?.accessToken;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      if (!accessToken) {
+        return res.status(401).json({ error: "No GitHub access token" });
+      }
+
+      // Load story with chapters and repo
+      const story = await prisma.story.findFirst({
+        where: { repoId },
+        include: {
+          chapters: { orderBy: { createdAt: "asc" } },
+          repo: true,
+        },
+      });
+
+      if (!story) {
+        return res.status(404).json({ error: "Story not found" });
+      }
+
+      const fullRepoName = story.repo.name;
+
+      // Known SHAs
+      const knownShas = new Set<string>();
+      for (const ch of story.chapters) {
+        for (const sha of ch.commitShas) knownShas.add(sha);
+      }
+
+      // Gather new commits since last known
+      let page = 1;
+      const perPage = 100;
+      const newCommits: any[] = [];
+      let stop = false;
+      while (!stop && page <= 3) {
         const resp = await fetch(
           `https://api.github.com/repos/${fullRepoName}/commits?per_page=${perPage}&page=${page}`,
           {
@@ -456,7 +541,7 @@ router.get(
         });
       }
 
-      // Fetch detailed info (including files) for new commits
+      // Fetch detailed info for new commits
       const detailedNewCommits: any[] = [];
       for (const c of newCommits) {
         try {
@@ -469,15 +554,13 @@ router.get(
               },
             }
           );
-          if (detailResp.ok) {
-            detailedNewCommits.push(await detailResp.json());
-          }
+          if (detailResp.ok) detailedNewCommits.push(await detailResp.json());
         } catch (e) {
           console.error("Error fetching detailed commit:", c.sha, e);
         }
       }
 
-      // Prepare last chapter context (limit to last 10 commits to keep prompt small)
+      // Prepare last chapter context
       const lastChapter = story.chapters[story.chapters.length - 1];
       const lastChapterCommitShas = lastChapter?.commitShas || [];
       const recentLastShas = lastChapterCommitShas.slice(
@@ -496,15 +579,13 @@ router.get(
               },
             }
           );
-          if (detailResp.ok) {
-            detailedLastCommits.push(await detailResp.json());
-          }
+          if (detailResp.ok) detailedLastCommits.push(await detailResp.json());
         } catch (e) {
           console.error("Error fetching detailed commit:", sha, e);
         }
       }
 
-      // Analyze whether to append or create a new chapter
+      // Analyze
       const analysis = await analyzeNewCommitsAgainstLastChapter(
         {
           title: lastChapter?.title ?? null,
@@ -531,8 +612,8 @@ router.get(
         annotation,
       });
     } catch (error) {
-      console.error("Error checking for story updates:", error);
-      res.status(500).json({ error: "Failed to check for updates" });
+      console.error("Error analyzing story updates:", error);
+      res.status(500).json({ error: "Failed to analyze updates" });
     }
   }
 );

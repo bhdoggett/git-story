@@ -113,6 +113,24 @@ const StoriesList: React.FC = () => {
     setIntelligentStoryView({ repoId, repoName });
   };
 
+  const handleAnalyzeUpdates = async (repoId: string) => {
+    try {
+      const res = await apiClient.stories.analyzeStoryUpdates(repoId);
+      const data = res.data;
+      if (!data.hasNewCommits) {
+        alert("No new commits to analyze.");
+        return;
+      }
+      const summary = data.decision === "append"
+        ? `AI suggests appending ${data.newCommitCount} commit(s) to the last chapter.`
+        : `AI suggests creating a new chapter with ${data.newCommitCount} commit(s).${data.proposedTitle ? `\nProposed title: ${data.proposedTitle}` : ""}`;
+      alert(`${summary}\n\nReasoning: ${data.reasoning || "N/A"}`);
+    } catch (e) {
+      console.error("Failed to analyze updates", e);
+      alert("Failed to analyze updates. Please try again.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-8">
@@ -201,6 +219,14 @@ const StoriesList: React.FC = () => {
               >
                 Story
               </button>
+              {updateStatus[repo.id]?.hasNewCommits && (
+                <button
+                  onClick={() => handleAnalyzeUpdates(repo.id)}
+                  className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-yellow-900/50 text-yellow-300 hover:bg-yellow-800/50 border border-yellow-700"
+                >
+                  Update Story
+                </button>
+              )}
               <button
                 onClick={() =>
                   setSelectedRepo(selectedRepo === repo.id ? null : repo.id)
