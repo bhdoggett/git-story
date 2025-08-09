@@ -14,6 +14,8 @@ dotenv.config();
 const CLIENT_BASE_URL = process.env.CLIENT_BASE_URL || "http://localhost:5173";
 
 const app = express();
+// Trust proxy so secure cookies and protocol work correctly behind load balancers/reverse proxies
+app.set("trust proxy", 1);
 app.use(cors({ origin: CLIENT_BASE_URL, credentials: true }));
 app.use(express.json());
 
@@ -28,6 +30,7 @@ app.use(
     cookie: {
       secure: isProduction, // true in production, false in development
       httpOnly: true,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   })
