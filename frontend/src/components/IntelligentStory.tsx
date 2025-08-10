@@ -75,9 +75,27 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
   const [editingGlobalContext, setEditingGlobalContext] =
     useState<boolean>(false);
   const [savingContext, setSavingContext] = useState<boolean>(false);
+  const [updateStatus, setUpdateStatus] = useState<{
+    hasNewCommits: boolean;
+    newCommitCount?: number;
+    decision?: "append" | "new" | null;
+    annotation?: string;
+    proposedTitle?: string | null;
+  } | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState<boolean>(false);
+  const [analyzingUpdates, setAnalyzingUpdates] = useState<boolean>(false);
+  const [applyingUpdates, setApplyingUpdates] = useState<boolean>(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState<boolean>(false);
+  const [updateAnalysis, setUpdateAnalysis] = useState<{
+    decision: "append" | "new";
+    newCommitCount: number;
+    proposedTitle?: string | null;
+    reasoning: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchStory();
+    checkUpdates();
   }, [repoId]);
 
   const fetchStory = async () => {
@@ -160,6 +178,95 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
       // Story doesn't exist yet, that's okay
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const res = await apiClient.stories.checkStoryUpdates(repoId);
+      setUpdateStatus(res.data);
+    } catch (e) {
+      console.error("Failed to check updates", e);
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleAnalyzeUpdates = async () => {
+    setAnalyzingUpdates(true);
+    try {
+      const res = await apiClient.stories.analyzeStoryUpdates(repoId);
+      const data = res.data;
+      if (!data.hasNewCommits) {
+        alert("No new commits to analyze.");
+        await checkUpdates();
+        return;
+      }
+
+      // Set the analysis data and show dialog
+      setUpdateAnalysis({
+        decision: data.decision || "new",
+        newCommitCount: data.newCommitCount || 0,
+        proposedTitle: data.proposedTitle,
+        reasoning: data.reasoning || "N/A",
+      });
+      setShowUpdateDialog(true);
+    } catch (e) {
+      console.error("Failed to analyze updates", e);
+      alert("Failed to analyze updates. Please try again.");
+    } finally {
+      setAnalyzingUpdates(false);
+    }
+  };
+
+  const handleApplyUpdates = async () => {
+    setApplyingUpdates(true);
+    try {
+      const res = await apiClient.stories.applyStoryUpdates(repoId);
+      const updated = res.data;
+      // Update state with returned story
+      setStory({
+        id: updated.id,
+        repoId: updated.repoId,
+        createdAt: updated.createdAt,
+        chapters: updated.chapters,
+      });
+
+      // Reset notes for any new chapters and fetch commit data for ranges
+      const notes: { [chapterId: string]: string } = {};
+      updated.chapters.forEach((chapter: any) => {
+        notes[chapter.id] = chapter.userNotes || "";
+      });
+      setChapterNotes(notes);
+
+      // Preload commit lists for date ranges
+      for (const ch of updated.chapters) {
+        try {
+          const response = await apiClient.stories.getChapterCommits(ch.id);
+          const commits = response.data.commits;
+          setChapterCommits((prev) => ({ ...prev, [ch.id]: commits }));
+          await storyCache.setChapterCommits(ch.id, commits);
+        } catch (error) {
+          console.error(`Error fetching commits for chapter ${ch.id}:`, error);
+        }
+      }
+
+      // Cache the updated story
+      await storyCache.setStory({
+        ...updated,
+        repoName,
+        lastUpdated: Date.now(),
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      });
+
+      // Refresh update status
+      await checkUpdates();
+    } catch (error) {
+      console.error("Failed to apply updates", error);
+      alert("Failed to apply updates. Please try again.");
+    } finally {
+      setApplyingUpdates(false);
     }
   };
 
@@ -439,6 +546,68 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
           <p className="text-gray-400 text-sm">
             AI-powered chapter generation based on commit themes
           </p>
+          {updateStatus && (
+            <div className="mt-2 text-sm">
+              {updateStatus.hasNewCommits ? (
+                <>
+                  <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-yellow-900/40 text-yellow-300 border border-yellow-700">
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M10 2a1 1 0 01.894.553l7 14A1 1 0 0117 18H3a1 1 0 01-.894-1.447l7-14A1 1 0 0110 2z" />
+                    </svg>
+                    {updateStatus.annotation || `There are updates available.`}
+                  </span>
+                  <button
+                    onClick={handleAnalyzeUpdates}
+                    disabled={analyzingUpdates}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ml-2 bg-yellow-600 text-yellow-900 hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed border border-yellow-700 transition-colors"
+                  >
+                    {analyzingUpdates ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-900"></div>
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="h-3 w-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                        Update
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-green-900/40 text-green-300 border border-green-700">
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L8.5 12.086l6.793-6.793a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Up to date
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -828,6 +997,94 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
               Generate intelligent chapters that group your commits by themes
               and features.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Update Analysis Dialog */}
+      {showUpdateDialog && updateAnalysis && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-white">
+                Story Update Analysis
+              </h3>
+              <button
+                onClick={() => setShowUpdateDialog(false)}
+                className="text-gray-400 hover:text-gray-300 text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Analysis content */}
+            <div className="space-y-4">
+              <div className="bg-gray-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      updateAnalysis.decision === "append"
+                        ? "bg-blue-500"
+                        : "bg-green-500"
+                    }`}
+                  ></div>
+                  <span className="text-white font-medium">
+                    {updateAnalysis.decision === "append"
+                      ? "Append to Last Chapter"
+                      : "Create New Chapter"}
+                  </span>
+                </div>
+
+                <p className="text-gray-300 text-sm">
+                  {updateAnalysis.decision === "append"
+                    ? `AI suggests appending ${updateAnalysis.newCommitCount} commit(s) to the last chapter.`
+                    : `AI suggests creating a new chapter with ${updateAnalysis.newCommitCount} commit(s).${
+                        updateAnalysis.proposedTitle
+                          ? `\n\nProposed title: "${updateAnalysis.proposedTitle}"`
+                          : ""
+                      }`}
+                </p>
+              </div>
+
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-white font-medium mb-2">AI Reasoning:</h4>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  {updateAnalysis.reasoning}
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={async () => {
+                    setShowUpdateDialog(false);
+                    await handleApplyUpdates();
+                  }}
+                  disabled={applyingUpdates}
+                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {applyingUpdates ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 mx-auto"></div>
+                      Applying...
+                    </>
+                  ) : (
+                    "Accept Updates"
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowUpdateDialog(false);
+                    handleAnalyzeUpdates();
+                  }}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -105,12 +105,24 @@ Return STRICT JSON with this shape:\n{
 
 LAST CHAPTER:\nTitle: ${lastChapter.title || "(untitled)"}\nSummary: ${lastChapter.summary}\nCommits:\n${lastChapter.commits
     .map(
-      (c: any) => `- ${c.sha}: ${c.commit.message} (author: ${c.commit.author?.name || c.commit.author?.email || "unknown"}; date: ${c.commit.author?.date || "unknown"})\n  Files: ${(c.files || []).map((f: any) => f.filename).slice(0, 8).join(", ")}`
+      (c: any) =>
+        `- ${c.sha}: ${c.commit.message} (author: ${c.commit.author?.name || c.commit.author?.email || "unknown"}; date: ${c.commit.author?.date || "unknown"})\n  Files: ${(
+          c.files || []
+        )
+          .map((f: any) => f.filename)
+          .slice(0, 8)
+          .join(", ")}`
     )
     .join("\n")}\n
 NEW COMMITS:\n${newCommits
     .map(
-      (c: any) => `- ${c.sha}: ${c.commit.message} (author: ${c.commit.author?.name || c.commit.author?.email || "unknown"}; date: ${c.commit.author?.date || "unknown"})\n  Files: ${(c.files || []).map((f: any) => f.filename).slice(0, 8).join(", ")}`
+      (c: any) =>
+        `- ${c.sha}: ${c.commit.message} (author: ${c.commit.author?.name || c.commit.author?.email || "unknown"}; date: ${c.commit.author?.date || "unknown"})\n  Files: ${(
+          c.files || []
+        )
+          .map((f: any) => f.filename)
+          .slice(0, 8)
+          .join(", ")}`
     )
     .join("\n")}\n
 Consider commit messages and touched files to determine continuity. If decision is "new", propose a concise human-friendly title (2-8 words) for the new chapter in proposedTitle. If decision is "append", proposedTitle should be null. Always include all new commit SHAs in newCommitShas. Only return JSON.`;
@@ -422,7 +434,8 @@ router.get(
       const perPage = 100;
       let newCount = 0;
       let stop = false;
-      while (!stop && page <= 3) { // hard cap 300 for responsiveness
+      while (!stop && page <= 3) {
+        // hard cap 300 for responsiveness
         const resp = await fetch(
           `https://api.github.com/repos/${fullRepoName}/commits?per_page=${perPage}&page=${page}`,
           {
@@ -608,12 +621,283 @@ router.post(
         decision,
         reasoning: analysis.reasoning,
         proposedTitle: analysis.proposedTitle || null,
-        newCommitShas: analysis.newCommitShas || detailedNewCommits.map((c: any) => c.sha),
+        newCommitShas:
+          analysis.newCommitShas || detailedNewCommits.map((c: any) => c.sha),
         annotation,
       });
     } catch (error) {
       console.error("Error analyzing story updates:", error);
       res.status(500).json({ error: "Failed to analyze updates" });
+    }
+  }
+);
+
+// Apply new commits to the story: append to last chapter or create new chapter(s)
+router.post(
+  "/story/:repoId/apply-updates",
+  async (req: Request, res: Response) => {
+    try {
+      const { repoId } = req.params;
+      const userId = req.session.userId;
+      const accessToken = (req as any).session?.accessToken;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      if (!accessToken) {
+        return res.status(401).json({ error: "No GitHub access token" });
+      }
+
+      // Load story with chapters and repo
+      const story = await prisma.story.findFirst({
+        where: { repoId },
+        include: {
+          chapters: { orderBy: { createdAt: "asc" } },
+          repo: true,
+        },
+      });
+
+      if (!story) {
+        return res.status(404).json({ error: "Story not found" });
+      }
+
+      const fullRepoName = story.repo.name;
+
+      // Build set of known SHAs
+      const knownShas = new Set<string>();
+      for (const ch of story.chapters) {
+        for (const sha of ch.commitShas) knownShas.add(sha);
+      }
+
+      // Gather new commits (basic list)
+      let page = 1;
+      const perPage = 100;
+      const newCommits: any[] = [];
+      let stop = false;
+      while (!stop && page <= 3) {
+        const resp = await fetch(
+          `https://api.github.com/repos/${fullRepoName}/commits?per_page=${perPage}&page=${page}`,
+          {
+            headers: {
+              Authorization: `token ${accessToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
+          }
+        );
+        if (!resp.ok) break;
+        const batch = await resp.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        for (const c of batch) {
+          if (knownShas.has(c.sha)) {
+            stop = true;
+            break;
+          }
+          newCommits.push(c);
+        }
+        if (batch.length < perPage) break;
+        page += 1;
+      }
+
+      if (newCommits.length === 0) {
+        return res.json({
+          id: story.id,
+          repoId: story.repoId,
+          createdAt: story.createdAt,
+          chapters: story.chapters.map((chapter: any) => ({
+            id: chapter.id,
+            title: chapter.title,
+            summary: chapter.summary,
+            userNotes: chapter.userNotes,
+            commitShas: chapter.commitShas,
+            commitCount: chapter.commitShas.length,
+            createdAt: chapter.createdAt,
+            updatedAt: chapter.updatedAt,
+          })),
+        });
+      }
+
+      // Fetch detailed info for new commits
+      const detailedNewCommits: any[] = [];
+      for (const c of newCommits) {
+        try {
+          const detailResp = await fetch(
+            `https://api.github.com/repos/${fullRepoName}/commits/${c.sha}`,
+            {
+              headers: {
+                Authorization: `token ${accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
+          if (detailResp.ok) detailedNewCommits.push(await detailResp.json());
+        } catch (e) {
+          console.error("Error fetching detailed commit:", c.sha, e);
+        }
+      }
+
+      const lastChapter = story.chapters[story.chapters.length - 1];
+
+      // If no chapters exist yet, treat as new chapters generation from new commits
+      if (!lastChapter) {
+        const chapterGroups = await analyzeAndGroupCommits(
+          detailedNewCommits,
+          story.globalContext || undefined
+        );
+        for (const group of chapterGroups) {
+          const groupedCommits = detailedNewCommits.filter((c: any) =>
+            group.commitShas.includes(c.sha)
+          );
+          const summary = await generateChapterSummary(
+            groupedCommits,
+            group.title,
+            story.globalContext || undefined
+          );
+          await prisma.chapter.create({
+            data: {
+              storyId: story.id,
+              title: group.title,
+              summary,
+              commitShas: group.commitShas,
+            },
+          });
+        }
+      } else {
+        // Prepare recent last chapter commits for analysis
+        const recentLastShas = lastChapter.commitShas.slice(
+          Math.max(0, lastChapter.commitShas.length - 10)
+        );
+        const detailedLastCommits: any[] = [];
+        for (const sha of recentLastShas) {
+          try {
+            const detailResp = await fetch(
+              `https://api.github.com/repos/${fullRepoName}/commits/${sha}`,
+              {
+                headers: {
+                  Authorization: `token ${accessToken}`,
+                  Accept: "application/vnd.github.v3+json",
+                },
+              }
+            );
+            if (detailResp.ok)
+              detailedLastCommits.push(await detailResp.json());
+          } catch (e) {
+            console.error("Error fetching detailed commit:", sha, e);
+          }
+        }
+
+        // Analyze decision
+        const analysis = await analyzeNewCommitsAgainstLastChapter(
+          {
+            title: lastChapter.title ?? null,
+            summary: lastChapter.summary || "",
+            commits: detailedLastCommits,
+          },
+          detailedNewCommits,
+          story.globalContext || undefined
+        );
+
+        const decision = analysis.decision === "append" ? "append" : "new";
+
+        if (decision === "append") {
+          const newCommitShas: string[] =
+            analysis.newCommitShas && Array.isArray(analysis.newCommitShas)
+              ? analysis.newCommitShas
+              : detailedNewCommits.map((c: any) => c.sha);
+
+          const updatedShas = [...lastChapter.commitShas, ...newCommitShas];
+
+          // Fetch details for ALL commits in the updated chapter to regenerate summary
+          const allUpdatedCommits: any[] = [];
+          for (const sha of updatedShas) {
+            try {
+              const resp = await fetch(
+                `https://api.github.com/repos/${fullRepoName}/commits/${sha}`,
+                {
+                  headers: {
+                    Authorization: `token ${accessToken}`,
+                    Accept: "application/vnd.github.v3+json",
+                  },
+                }
+              );
+              if (resp.ok) allUpdatedCommits.push(await resp.json());
+            } catch (e) {
+              console.error("Error fetching commit for summary regen:", sha, e);
+            }
+          }
+
+          const newSummary = await generateChapterSummary(
+            allUpdatedCommits,
+            lastChapter.title || "Chapter",
+            story.globalContext || undefined
+          );
+
+          await prisma.chapter.update({
+            where: { id: lastChapter.id },
+            data: {
+              commitShas: updatedShas,
+              summary: newSummary,
+            },
+          });
+        } else {
+          // Create one or more new chapters by grouping new commits
+          const chapterGroups = await analyzeAndGroupCommits(
+            detailedNewCommits,
+            story.globalContext || undefined
+          );
+          for (const group of chapterGroups) {
+            const groupedCommits = detailedNewCommits.filter((c: any) =>
+              group.commitShas.includes(c.sha)
+            );
+            const title =
+              group.title || analysis.proposedTitle || "New Chapter";
+            const summary = await generateChapterSummary(
+              groupedCommits,
+              title,
+              story.globalContext || undefined
+            );
+            await prisma.chapter.create({
+              data: {
+                storyId: story.id,
+                title,
+                summary,
+                commitShas: group.commitShas,
+              },
+            });
+          }
+        }
+      }
+
+      // Reload story to return updated view
+      const updated = await prisma.story.findFirst({
+        where: { repoId },
+        include: {
+          chapters: { orderBy: { createdAt: "asc" } },
+        },
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: "Story not found after update" });
+      }
+
+      return res.json({
+        id: updated.id,
+        repoId: updated.repoId,
+        createdAt: updated.createdAt,
+        chapters:
+          updated.chapters?.map((chapter: any) => ({
+            id: chapter.id,
+            title: chapter.title,
+            summary: chapter.summary,
+            userNotes: chapter.userNotes,
+            commitShas: chapter.commitShas,
+            commitCount: chapter.commitShas.length,
+            createdAt: chapter.createdAt,
+            updatedAt: chapter.updatedAt,
+          })) || [],
+      });
+    } catch (error) {
+      console.error("Error applying story updates:", error);
+      res.status(500).json({ error: "Failed to apply updates" });
     }
   }
 );

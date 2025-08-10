@@ -98,6 +98,10 @@ export const apiClient = {
     analyzeStoryUpdates: (repoId: string) =>
       api.post(`/api/stories/story/${repoId}/analyze-updates`),
 
+    // Apply new commits to the story (append or create new chapter(s))
+    applyStoryUpdates: (repoId: string) =>
+      api.post(`/api/stories/story/${repoId}/apply-updates`),
+
     // Update chapter notes
     updateChapterNotes: (chapterId: string, userNotes: string) =>
       api.put(`/api/stories/chapters/${chapterId}/notes`, { userNotes }),
