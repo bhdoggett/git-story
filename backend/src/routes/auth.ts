@@ -106,8 +106,6 @@ router.get(
       // Store access token in session for later use
       req.session.accessToken = accessToken;
       req.session.userId = dbUser.id;
-
-      console.log(CLIENT_BASE_URL);
       res.redirect(`${CLIENT_BASE_URL}/dashboard`);
     } catch (error) {
       console.error("Error in GitHub callback:", error);

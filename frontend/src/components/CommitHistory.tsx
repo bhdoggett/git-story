@@ -21,6 +21,14 @@ interface Commit {
   analysis?: string;
 }
 
+interface PaginationInfo {
+  page: number;
+  perPage: number;
+  totalCommits: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 interface CommitHistoryProps {
   repoId: string;
   repoName: string;
@@ -29,37 +37,121 @@ interface CommitHistoryProps {
 const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
   const [commits, setCommits] = useState<Commit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
   const [analyzingCommit, setAnalyzingCommit] = useState<string | null>(null);
   const [analyzingBatch, setAnalyzingBatch] = useState(false);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingDiffs, setLoadingDiffs] = useState<{ [sha: string]: boolean }>(
+    {}
+  );
 
   useEffect(() => {
     fetchCommits();
   }, [repoId]);
 
-  const fetchCommits = async () => {
+  const fetchCommits = async (page = 1, append = false) => {
     try {
-      setLoading(true);
+      if (page === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
 
-      // Try to get from cache first
-      const cachedCommits = await storyCache.getRepositoryCommits(repoId);
-      if (cachedCommits) {
-        setCommits(cachedCommits.commits);
-        setLoading(false);
-        return;
+      // Try to get from cache first (only for first page)
+      if (page === 1) {
+        const cachedCommits = await storyCache.getRepositoryCommits(repoId);
+        if (cachedCommits) {
+          setCommits(cachedCommits.commits);
+          setPagination({
+            page: 1,
+            perPage: 50,
+            totalCommits: cachedCommits.commits.length,
+            hasNextPage: cachedCommits.commits.length === 50,
+            hasPrevPage: false,
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       // If not in cache, fetch from API
-      const response = await apiClient.repos.getCommits(repoId);
-      setCommits(response.data);
+      const response = await apiClient.repos.getCommits(
+        repoId,
+        page,
+        50,
+        false
+      );
+      const newCommits = response.data.commits;
 
-      // Cache the commit data
-      await storyCache.setRepositoryCommits(repoId, response.data);
+      if (append) {
+        setCommits((prev) => [...prev, ...newCommits]);
+      } else {
+        setCommits(newCommits);
+        // Cache the first page
+        await storyCache.setRepositoryCommits(repoId, newCommits);
+      }
+
+      setPagination(response.data.pagination);
+      setCurrentPage(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch commits");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMoreCommits = async () => {
+    if (pagination?.hasNextPage) {
+      await fetchCommits(currentPage + 1, true);
+    }
+  };
+
+  const loadCommitDiff = async (commitSha: string) => {
+    // Check if diff is already loaded
+    const commit = commits.find((c) => c.sha === commitSha);
+    if (commit && commit.diff.length > 0) {
+      return; // Diff already loaded
+    }
+
+    setLoadingDiffs((prev) => ({ ...prev, [commitSha]: true }));
+
+    try {
+      // Check cache first
+      const cachedDiff = await storyCache.getCommitDiff(repoId, commitSha);
+      if (cachedDiff && cachedDiff.diff.length > 0) {
+        // Update the commit with cached diff
+        setCommits((prev) =>
+          prev.map((c) =>
+            c.sha === commitSha
+              ? { ...c, diff: cachedDiff.diff, analysis: cachedDiff.analysis }
+              : c
+          )
+        );
+        return;
+      }
+
+      // Fetch from API
+      const response = await apiClient.repos.getCommitDiff(repoId, commitSha);
+      const commitWithDiff = response.data;
+
+      // Update the commit with diff
+      setCommits((prev) =>
+        prev.map((c) =>
+          c.sha === commitSha ? { ...c, diff: commitWithDiff.diff } : c
+        )
+      );
+
+      // Cache the diff
+      await storyCache.updateCommitDiff(repoId, commitSha, commitWithDiff.diff);
+    } catch (err) {
+      console.error("Failed to load commit diff:", err);
+      setError("Failed to load commit diff");
+    } finally {
+      setLoadingDiffs((prev) => ({ ...prev, [commitSha]: false }));
     }
   };
 
@@ -76,6 +168,17 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
             : commit
         )
       );
+
+      // Cache the analysis
+      const commit = commits.find((c) => c.sha === commitSha);
+      if (commit) {
+        await storyCache.updateCommitDiff(
+          repoId,
+          commitSha,
+          commit.diff,
+          response.data.analysis
+        );
+      }
     } catch (err: any) {
       console.error("Failed to analyze commit:", err);
       const errorMessage =
@@ -103,6 +206,19 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
           analysis: response.data.analyses[commit.sha] || commit.analysis,
         }))
       );
+
+      // Cache all analyses
+      for (const commit of commits) {
+        const analysis = response.data.analyses[commit.sha];
+        if (analysis) {
+          await storyCache.updateCommitDiff(
+            repoId,
+            commit.sha,
+            commit.diff,
+            analysis
+          );
+        }
+      }
     } catch (err: any) {
       console.error("Failed to analyze commits:", err);
       const errorMessage =
@@ -189,9 +305,17 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h3 className="text-lg font-medium text-white">
-          Commit History - {repoName}
-        </h3>
+        <div>
+          <h3 className="text-lg font-medium text-white">
+            Commit History - {repoName}
+          </h3>
+          {pagination && (
+            <p className="text-sm text-gray-400 mt-1">
+              Showing {commits.length} of{" "}
+              {pagination.totalCommits.toLocaleString()} commits
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={analyzeAllCommits}
@@ -222,9 +346,6 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
               </>
             )}
           </button>
-          <span className="text-sm text-gray-400">
-            {commits.length} commits
-          </span>
         </div>
       </div>
 
@@ -267,7 +388,7 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
                       >
                         <path
                           fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                           clipRule="evenodd"
                         />
                       </svg>
@@ -293,11 +414,17 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
                   )}
                 </button>
                 <button
-                  onClick={() =>
-                    setExpandedCommit(
-                      expandedCommit === commit.sha ? null : commit.sha
-                    )
-                  }
+                  onClick={() => {
+                    if (expandedCommit === commit.sha) {
+                      setExpandedCommit(null);
+                    } else {
+                      setExpandedCommit(commit.sha);
+                      // Load diff if not already loaded
+                      if (commit.diff.length === 0) {
+                        loadCommitDiff(commit.sha);
+                      }
+                    }
+                  }}
                   className="text-blue-400 hover:text-blue-300 text-sm font-medium"
                 >
                   {expandedCommit === commit.sha ? "Hide Diff" : "Show Diff"}
@@ -371,32 +498,80 @@ const CommitHistory: React.FC<CommitHistoryProps> = ({ repoId, repoName }) => {
             {/* Expanded diff view */}
             {expandedCommit === commit.sha && (
               <div className="mt-4 pt-4 border-t border-gray-700">
-                <div className="space-y-4">
-                  {commit.diff.map((file, index) => (
-                    <div key={index} className="bg-gray-900 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-white">
-                          {file.filename}
-                        </span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(file.status)}`}
-                        >
-                          {file.status}
-                        </span>
-                      </div>
-                      {file.patch && (
-                        <div className="bg-black border border-gray-700 rounded p-2 overflow-x-auto">
-                          {formatPatch(file.patch)}
+                {loadingDiffs[commit.sha] ? (
+                  <div className="flex justify-center items-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                    <span className="ml-2 text-sm text-gray-400">
+                      Loading diff...
+                    </span>
+                  </div>
+                ) : commit.diff.length > 0 ? (
+                  <div className="space-y-4">
+                    {commit.diff.map((file, index) => (
+                      <div key={index} className="bg-gray-900 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-white">
+                            {file.filename}
+                          </span>
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium border ${getStatusColor(file.status)}`}
+                          >
+                            {file.status}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        {file.patch && (
+                          <div className="bg-black border border-gray-700 rounded p-2 overflow-x-auto">
+                            {formatPatch(file.patch)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-400">
+                    No diff available for this commit
+                  </div>
+                )}
               </div>
             )}
           </div>
         ))}
       </div>
+
+      {/* Load More Button */}
+      {pagination?.hasNextPage && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={loadMoreCommits}
+            disabled={loadingMore}
+            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center gap-2"
+          >
+            {loadingMore ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+                <span>Load More Commits</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {commits.length === 0 && (
         <div className="text-center py-8">

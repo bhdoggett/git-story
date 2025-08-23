@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "../utils/api";
+import PublicRepoSearch from "./PublicRepoSearch";
 
 interface Repository {
   id: number;
@@ -27,6 +28,7 @@ const RepositorySelector: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"personal" | "public">("personal");
 
   useEffect(() => {
     fetchRepositories();
@@ -165,40 +167,49 @@ const RepositorySelector: React.FC = () => {
         </div>
       )}
 
-      {/* Available Repositories */}
-      <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
-          <h3 className="text-lg font-medium text-white">
-            Available Repositories
-          </h3>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search repositories..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-900 border border-gray-600 text-white rounded-md px-3 py-2 pl-10 text-sm focus:outline-none focus:border-blue-500 w-full sm:w-64"
-            />
-            <svg
-              className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab("personal")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === "personal"
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-700"
+            }`}
+          >
+            My GitHub Repositories
+          </button>
+          <button
+            onClick={() => setActiveTab("public")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === "public"
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-700"
+            }`}
+          >
+            Search Public Repositories
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === "personal" ? (
+        <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
+            <h3 className="text-lg font-medium text-white">
+              Available Repositories
+            </h3>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search repositories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-gray-900 border border-gray-600 text-white rounded-md px-3 py-2 pl-10 text-sm focus:outline-none focus:border-blue-500 w-full sm:w-64"
               />
-            </svg>
-          </div>
-        </div>
-        <div className="grid gap-4">
-          {filteredRepositories.length === 0 ? (
-            <div className="text-center py-8">
               <svg
-                className="mx-auto h-12 w-12 text-gray-500"
+                className="absolute left-3 top-2.5 h-4 w-4 text-gray-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -210,91 +221,116 @@ const RepositorySelector: React.FC = () => {
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-white">
-                No repositories found
-              </h3>
-              <p className="mt-1 text-sm text-gray-400">
-                {searchTerm
-                  ? `No repositories match "${searchTerm}"`
-                  : "No repositories available"}
-              </p>
             </div>
-          ) : (
-            filteredRepositories.map((repo) => {
-              const connected = isConnected(repo.id);
-              return (
-                <div
-                  key={repo.id}
-                  className="bg-gray-800 border border-gray-700 rounded-lg p-4"
+          </div>
+          <div className="grid gap-4">
+            {filteredRepositories.length === 0 ? (
+              <div className="text-center py-8">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-sm font-medium text-white">
-                          {repo.name}
-                        </h4>
-                        {repo.private && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300">
-                            Private
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-white">
+                  No repositories found
+                </h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  {searchTerm
+                    ? `No repositories match "${searchTerm}"`
+                    : "No repositories available"}
+                </p>
+              </div>
+            ) : (
+              filteredRepositories.map((repo) => {
+                const connected = isConnected(repo.id);
+                return (
+                  <div
+                    key={repo.id}
+                    className="bg-gray-800 border border-gray-700 rounded-lg p-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-sm font-medium text-white">
+                            {repo.name}
+                          </h4>
+                          {repo.private && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300">
+                              Private
+                            </span>
+                          )}
+                        </div>
+                        {repo.description && (
+                          <p className="text-sm text-gray-400 mt-1">
+                            {repo.description}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Updated{" "}
+                          {new Date(repo.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        {connected ? (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+                            Connected
                           </span>
+                        ) : (
+                          <button
+                            onClick={() => connectRepository(repo)}
+                            disabled={connecting === repo.id}
+                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 hover:bg-blue-800/50 border border-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {connecting === repo.id ? (
+                              <>
+                                <svg
+                                  className="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-300"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                  ></circle>
+                                  <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                  ></path>
+                                </svg>
+                                Connecting...
+                              </>
+                            ) : (
+                              "Connect"
+                            )}
+                          </button>
                         )}
                       </div>
-                      {repo.description && (
-                        <p className="text-sm text-gray-400 mt-1">
-                          {repo.description}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-500 mt-1">
-                        Updated {new Date(repo.updated_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div>
-                      {connected ? (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
-                          Connected
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => connectRepository(repo)}
-                          disabled={connecting === repo.id}
-                          className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 hover:bg-blue-800/50 border border-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {connecting === repo.id ? (
-                            <>
-                              <svg
-                                className="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-300"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                              >
-                                <circle
-                                  className="opacity-25"
-                                  cx="12"
-                                  cy="12"
-                                  r="10"
-                                  stroke="currentColor"
-                                  strokeWidth="4"
-                                ></circle>
-                                <path
-                                  className="opacity-75"
-                                  fill="currentColor"
-                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                ></path>
-                              </svg>
-                              Connecting...
-                            </>
-                          ) : (
-                            "Connect"
-                          )}
-                        </button>
-                      )}
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <PublicRepoSearch
+          connectedRepos={connectedRepos}
+          onRepositoryConnected={fetchConnectedRepositories}
+        />
+      )}
     </div>
   );
 };

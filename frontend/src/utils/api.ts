@@ -53,6 +53,10 @@ export const apiClient = {
     // GitHub repositories
     getGitHubRepos: () => api.get("/api/repos/github"),
 
+    // Search for public GitHub repositories
+    searchPublicRepos: (query: string) =>
+      api.get(`/api/repos/search?q=${encodeURIComponent(query)}`),
+
     // Connected repositories
     getConnected: () => api.get("/api/repos/connected"),
 
@@ -67,7 +71,22 @@ export const apiClient = {
     disconnect: (repoId: string) => api.delete(`/api/repos/${repoId}`),
 
     // Get commit history
-    getCommits: (repoId: string) => api.get(`/api/repos/${repoId}/commits`),
+    getCommits: (
+      repoId: string,
+      page?: number,
+      perPage?: number,
+      includeDiffs?: boolean
+    ) => {
+      const params = new URLSearchParams();
+      if (page) params.append("page", page.toString());
+      if (perPage) params.append("per_page", perPage.toString());
+      if (includeDiffs) params.append("diffs", includeDiffs.toString());
+      return api.get(`/api/repos/${repoId}/commits?${params.toString()}`);
+    },
+
+    // Get individual commit diff on-demand
+    getCommitDiff: (repoId: string, commitSha: string) =>
+      api.get(`/api/repos/${repoId}/commits/${commitSha}/diff`),
 
     // Analyze single commit with Gemini
     analyzeCommit: (repoId: string, commitSha: string) =>

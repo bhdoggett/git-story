@@ -168,6 +168,9 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const repoId = req.params.repoId;
+      const page = parseInt(req.query.page as string) || 1;
+      const perPage = parseInt(req.query.per_page as string) || 50;
+      const includeDiffs = req.query.diffs === "true";
 
       // Get repository info from database
       const { PrismaClient } = require("../generated/prisma");
@@ -189,96 +192,195 @@ router.get(
       // Use the full repository name stored in the database
       const fullRepoName = repo.name; // This should now contain "owner/repo-name"
 
-      console.log("Fetching ALL commits for repo:", fullRepoName);
+      console.log(
+        "Fetching commits for repo:",
+        fullRepoName,
+        "page:",
+        page,
+        "per_page:",
+        perPage
+      );
 
-      // Fetch all commits from GitHub API using pagination
-      let allCommits: any[] = [];
-      let page = 1;
-      let keepFetching = true;
-      const perPage = 100;
-      while (keepFetching) {
-        const response = await axios.get(
-          `https://api.github.com/repos/${fullRepoName}/commits`,
+      // Fetch commits from GitHub API with pagination
+      const response = await axios.get(
+        `https://api.github.com/repos/${fullRepoName}/commits`,
+        {
+          headers: {
+            Authorization: `token ${req.accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+          params: {
+            per_page: perPage,
+            page,
+          },
+        }
+      );
+
+      const commits = response.data;
+      let commitsWithDiffs = commits;
+
+      // Only fetch diffs if explicitly requested
+      if (includeDiffs) {
+        console.log("Fetching diffs for", commits.length, "commits");
+
+        // Fetch diffs for each commit (limit to first 200 for performance)
+        commitsWithDiffs = await Promise.all(
+          commits.slice(0, 200).map(async (commit: any) => {
+            try {
+              // Get the diff for this commit
+              const diffResponse = await axios.get(
+                `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
+                {
+                  headers: {
+                    Authorization: `token ${req.accessToken}`,
+                    Accept: "application/vnd.github.v3+json",
+                  },
+                }
+              );
+
+              const files = diffResponse.data.files || [];
+              const diff = files.map((file: any) => ({
+                filename: file.filename,
+                status: file.status,
+                additions: file.additions,
+                deletions: file.deletions,
+                changes: file.changes,
+                patch: file.patch,
+              }));
+
+              return {
+                sha: commit.sha,
+                message: commit.commit.message,
+                author: commit.commit.author.name,
+                date: commit.commit.author.date,
+                url: commit.html_url,
+                diff,
+              };
+            } catch (error) {
+              console.error(
+                `Error fetching diff for commit ${commit.sha}:`,
+                error
+              );
+              return {
+                sha: commit.sha,
+                message: commit.commit.message,
+                author: commit.commit.author.name,
+                date: commit.commit.author.date,
+                url: commit.html_url,
+                diff: [],
+              };
+            }
+          })
+        );
+      } else {
+        // Return commits without diffs
+        commitsWithDiffs = commits.map((commit: any) => ({
+          sha: commit.sha,
+          message: commit.commit.message,
+          author: commit.commit.author.name,
+          date: commit.commit.author.date,
+          url: commit.html_url,
+          diff: [], // Empty array when diffs not requested
+        }));
+      }
+
+      // Get total commit count for pagination info
+      let totalCommits = 0;
+      try {
+        // Try to get commit count from repository statistics
+        // This is more reliable than search endpoints
+        const statsResponse = await axios.get(
+          `https://api.github.com/repos/${fullRepoName}/stats/participation`,
           {
             headers: {
               Authorization: `token ${req.accessToken}`,
               Accept: "application/vnd.github.v3+json",
             },
-            params: {
-              per_page: perPage,
-              page,
-            },
           }
         );
-        if (response.data.length === 0) {
-          keepFetching = false;
-        } else {
-          allCommits = allCommits.concat(response.data);
-          page++;
-          if (response.data.length < perPage) {
-            keepFetching = false;
-          }
-        }
-      }
 
-      // Fetch diffs for each commit (limit to first 200 for performance)
-      const commitsWithDiffs = await Promise.all(
-        allCommits.map(async (commit: any) => {
-          try {
-            // Get the diff for this commit
-            const diffResponse = await axios.get(
-              `https://api.github.com/repos/${fullRepoName}/commits/${commit.sha}`,
+        // If we can't get stats, try a different approach
+        if (statsResponse.status === 200 && statsResponse.data.all) {
+          // The participation stats give us weekly commit counts
+          // We can sum them up for a rough estimate, but this isn't perfect
+          const weeklyCommits = statsResponse.data.all;
+          totalCommits = weeklyCommits.reduce(
+            (sum: number, count: number) => sum + count,
+            0
+          );
+        } else {
+          // Fallback: try to get from the default branch
+          const repoResponse = await axios.get(
+            `https://api.github.com/repos/${fullRepoName}`,
+            {
+              headers: {
+                Authorization: `token ${req.accessToken}`,
+                Accept: "application/vnd.github.v3+json",
+              },
+            }
+          );
+
+          if (repoResponse.data.default_branch) {
+            // For a more accurate count, we can make a request with a very high per_page
+            // and get the total from the Link header
+            const highPageResponse = await axios.get(
+              `https://api.github.com/repos/${fullRepoName}/commits`,
               {
                 headers: {
                   Authorization: `token ${req.accessToken}`,
                   Accept: "application/vnd.github.v3+json",
                 },
+                params: {
+                  per_page: 1,
+                  page: 1,
+                },
               }
             );
 
-            const files = diffResponse.data.files || [];
-            const diff = files.map((file: any) => ({
-              filename: file.filename,
-              status: file.status,
-              additions: file.additions,
-              deletions: file.deletions,
-              changes: file.changes,
-              patch: file.patch,
-            }));
+            // Check if there's a Link header with last page info
+            const linkHeader = highPageResponse.headers.link;
+            if (linkHeader) {
+              const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+              if (lastPageMatch) {
+                const lastPage = parseInt(lastPageMatch[1]);
+                // Get the last page to see how many commits are on it
+                const lastPageResponse = await axios.get(
+                  `https://api.github.com/repos/${fullRepoName}/commits`,
+                  {
+                    headers: {
+                      Authorization: `token ${req.accessToken}`,
+                      Accept: "application/vnd.github.v3+json",
+                    },
+                    params: {
+                      per_page: 100,
+                      page: lastPage,
+                    },
+                  }
+                );
 
-            return {
-              sha: commit.sha,
-              message: commit.commit.message,
-              author: commit.commit.author.name,
-              date: commit.commit.author.date,
-              url: commit.html_url,
-              diff,
-            };
-          } catch (error) {
-            console.error(
-              `Error fetching diff for commit ${commit.sha}:`,
-              error
-            );
-            return {
-              sha: commit.sha,
-              message: commit.commit.message,
-              author: commit.commit.author.name,
-              date: commit.commit.author.date,
-              url: commit.html_url,
-              diff: [],
-            };
+                totalCommits =
+                  (lastPage - 1) * 100 + lastPageResponse.data.length;
+              }
+            }
           }
-        })
-      );
+        }
+      } catch (error) {
+        console.error("Error fetching total commit count:", error);
+        // If we can't get total count, estimate from current page
+        // This is a fallback but not ideal
+        totalCommits = page * perPage + commits.length;
+      }
 
-      console.log(
-        "Successfully fetched",
-        commitsWithDiffs.length,
-        "commits with diffs (out of",
-        allCommits.length,
-        "total commits)"
-      );
-      res.json(commitsWithDiffs);
+      res.json({
+        commits: commitsWithDiffs,
+        pagination: {
+          page,
+          perPage,
+          totalCommits,
+          hasNextPage: commits.length === perPage,
+          hasPrevPage: page > 1,
+        },
+      });
     } catch (error) {
       console.error("Error fetching commits:", error);
       res.status(500).json({ error: "Failed to fetch commits" });
@@ -533,5 +635,129 @@ router.post("/:repoId/story", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to generate story" });
   }
 });
+
+// Search for public GitHub repositories
+router.get(
+  "/search",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { q } = req.query;
+
+      if (!q || typeof q !== "string") {
+        return res.status(400).json({ error: "Search query 'q' is required" });
+      }
+
+      // Search for public repositories on GitHub
+      const response = await axios.get(
+        "https://api.github.com/search/repositories",
+        {
+          headers: {
+            Authorization: `token ${req.accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+          params: {
+            q: q,
+            sort: "stars",
+            order: "desc",
+            per_page: 20,
+          },
+        }
+      );
+
+      const repos = response.data.items.map((repo: any) => ({
+        id: repo.id,
+        name: repo.name,
+        full_name: repo.full_name,
+        description: repo.description,
+        private: repo.private,
+        html_url: repo.html_url,
+        updated_at: repo.updated_at,
+        stargazers_count: repo.stargazers_count,
+        language: repo.language,
+        forks_count: repo.forks_count,
+        owner: {
+          login: repo.owner.login,
+          avatar_url: repo.owner.avatar_url,
+        },
+      }));
+
+      res.json({
+        total_count: response.data.total_count,
+        items: repos,
+      });
+    } catch (error) {
+      console.error("Error searching repositories:", error);
+      res.status(500).json({ error: "Failed to search repositories" });
+    }
+  }
+);
+
+// Get individual commit diff on-demand
+router.get(
+  "/:repoId/commits/:commitSha/diff",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const repoId = req.params.repoId;
+      const commitSha = req.params.commitSha;
+
+      // Get repository info from database
+      const { PrismaClient } = require("../generated/prisma");
+      const prisma = new PrismaClient();
+
+      const repo = await prisma.repo.findUnique({
+        where: { id: repoId },
+      });
+
+      if (!repo) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if user owns this repository
+      if (repo.userId !== req.session.userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const fullRepoName = repo.name;
+
+      // Fetch the specific commit with diff from GitHub API
+      const commitResponse = await axios.get(
+        `https://api.github.com/repos/${fullRepoName}/commits/${commitSha}`,
+        {
+          headers: {
+            Authorization: `token ${req.accessToken}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        }
+      );
+
+      const commitData = commitResponse.data;
+      const files = commitData.files || [];
+      const diff = files.map((file: any) => ({
+        filename: file.filename,
+        status: file.status,
+        additions: file.additions,
+        deletions: file.deletions,
+        changes: file.changes,
+        patch: file.patch,
+      }));
+
+      const commit = {
+        sha: commitData.sha,
+        message: commitData.commit.message,
+        author: commitData.commit.author.name,
+        date: commitData.commit.author.date,
+        url: commitData.html_url,
+        diff,
+      };
+
+      res.json(commit);
+    } catch (error) {
+      console.error("Error fetching commit diff:", error);
+      res.status(500).json({ error: "Failed to fetch commit diff" });
+    }
+  }
+);
 
 export default router;

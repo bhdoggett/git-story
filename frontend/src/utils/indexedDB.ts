@@ -273,6 +273,83 @@ class StoryCache {
     });
   }
 
+  async updateCommitDiff(
+    repoId: string,
+    commitSha: string,
+    diff: any[],
+    analysis?: string
+  ): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(
+        ["repositoryCommits"],
+        "readwrite"
+      );
+      const store = transaction.objectStore("repositoryCommits");
+      const request = store.get(repoId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cached = request.result as CachedRepositoryCommits;
+        if (cached) {
+          // Update the specific commit with diff and analysis
+          const updatedCommits = cached.commits.map((commit) =>
+            commit.sha === commitSha
+              ? { ...commit, diff, analysis: analysis || commit.analysis }
+              : commit
+          );
+
+          const updatedCache: CachedRepositoryCommits = {
+            ...cached,
+            commits: updatedCommits,
+            lastUpdated: Date.now(),
+          };
+
+          const putRequest = store.put(updatedCache);
+          putRequest.onerror = () => reject(putRequest.error);
+          putRequest.onsuccess = () => resolve();
+        } else {
+          reject(new Error("Repository commits not found in cache"));
+        }
+      };
+    });
+  }
+
+  async getCommitDiff(
+    repoId: string,
+    commitSha: string
+  ): Promise<{ diff: any[]; analysis?: string } | null> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(
+        ["repositoryCommits"],
+        "readonly"
+      );
+      const store = transaction.objectStore("repositoryCommits");
+      const request = store.get(repoId);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cached = request.result as CachedRepositoryCommits;
+        if (cached) {
+          const commit = cached.commits.find((c) => c.sha === commitSha);
+          if (commit) {
+            resolve({
+              diff: commit.diff || [],
+              analysis: commit.analysis,
+            });
+          } else {
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      };
+    });
+  }
+
   async deleteRepositoryCommits(repoId: string): Promise<void> {
     if (!this.db) await this.init();
 

@@ -18,11 +18,19 @@ interface Story {
   }>;
 }
 
+interface RepositoryStats {
+  totalCommits: number;
+  lastUpdated: string;
+}
+
 const StoriesList: React.FC = () => {
   const [connectedRepos, setConnectedRepos] = useState<ConnectedRepository[]>(
     []
   );
   const [stories, setStories] = useState<{ [repoId: string]: Story }>({});
+  const [repoStats, setRepoStats] = useState<{
+    [repoId: string]: RepositoryStats;
+  }>({});
   const [loading, setLoading] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -42,16 +50,41 @@ const StoriesList: React.FC = () => {
 
       // Fetch story data for each repository
       const storyData: { [repoId: string]: Story } = {};
+      const statsData: { [repoId: string]: RepositoryStats } = {};
+
       for (const repo of response.data) {
         try {
+          // Fetch story data
           const storyResponse = await apiClient.stories.getStory(repo.id);
           storyData[repo.id] = storyResponse.data;
         } catch (error) {
           // Story doesn't exist yet, that's okay
           console.log(`No story found for repo ${repo.id}`);
         }
+
+        try {
+          // Fetch repository stats (total commits)
+          const commitsResponse = await apiClient.repos.getCommits(
+            repo.id,
+            1,
+            1,
+            false
+          );
+          statsData[repo.id] = {
+            totalCommits: commitsResponse.data.pagination.totalCommits,
+            lastUpdated: new Date().toISOString(), // We could get this from the repo data if needed
+          };
+        } catch (error) {
+          console.log(`Could not fetch stats for repo ${repo.id}:`, error);
+          statsData[repo.id] = {
+            totalCommits: 0,
+            lastUpdated: new Date().toISOString(),
+          };
+        }
       }
+
       setStories(storyData);
+      setRepoStats(statsData);
     } catch (err) {
       console.error("Error fetching connected repositories:", err);
     } finally {
@@ -145,11 +178,22 @@ const StoriesList: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
             <div className="flex-1">
               <h4 className="text-lg font-medium text-white">{repo.name}</h4>
-              <p className="text-sm text-gray-400 mt-1">
-                {stories[repo.id]?.chapters?.length > 0
-                  ? `${stories[repo.id].chapters.length} chapter${stories[repo.id].chapters.length !== 1 ? "s" : ""}`
-                  : "No chapters yet"}
-              </p>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mt-1">
+                {stories[repo.id]?.chapters?.length > 0 ? (
+                  <span>
+                    {stories[repo.id].chapters.length} chapter
+                    {stories[repo.id].chapters.length !== 1 ? "s" : ""}
+                  </span>
+                ) : (
+                  <span>No chapters yet</span>
+                )}
+                {repoStats[repo.id]?.totalCommits > 0 && (
+                  <span>
+                    {repoStats[repo.id].totalCommits.toLocaleString()} total
+                    commits
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button

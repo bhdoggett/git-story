@@ -652,10 +652,10 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
       {/* Global Context Section */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
         <h4 className="text-lg font-medium text-white mb-4">
-          What should we know about your project?
+          What should we know about this project?
         </h4>
         <p className="text-gray-400 text-sm mb-4">
-          Help us understand your project better by providing context about key
+          Help us understand this project better by providing context about key
           moments, important tools, dependencies, or development milestones.
           This will help the AI generate more relevant and personalized stories.
         </p>
@@ -672,7 +672,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
               }}
               className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
               rows={4}
-              placeholder="Tell us about your project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
+              placeholder="Tell us about this project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
               autoFocus
             />
             <div className="flex justify-end space-x-2">
@@ -705,7 +705,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
               </p>
             ) : (
               <p className="text-gray-500 text-sm italic">
-                Click to add context about your project...
+                Click to add context about this project...
               </p>
             )}
             <p className="text-xs text-gray-500 mt-2">
@@ -939,7 +939,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
                     }));
                   }}
                   onBlur={(e) => updateChapterNotes(chapter.id, e.target.value)}
-                  placeholder="Add your personal notes about this chapter..."
+                  placeholder="Add personal notes about this chapter..."
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Your notes are automatically saved when you click away from
