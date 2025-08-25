@@ -284,92 +284,97 @@ router.get(
         }));
       }
 
-      // Get total commit count for pagination info
+      // Get total commit count using the most efficient method
       let totalCommits = 0;
       try {
-        // Try to get commit count from repository statistics
-        // This is more reliable than search endpoints
-        const statsResponse = await axios.get(
-          `https://api.github.com/repos/${fullRepoName}/stats/participation`,
-          {
-            headers: {
-              Authorization: `token ${req.accessToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-          }
-        );
+        // Method 1: Try to get from Link header (most efficient)
+        const linkHeader = response.headers.link;
+        console.log(`[DEBUG] Link header for ${fullRepoName}:`, linkHeader);
 
-        // If we can't get stats, try a different approach
-        if (statsResponse.status === 200 && statsResponse.data.all) {
-          // The participation stats give us weekly commit counts
-          // We can sum them up for a rough estimate, but this isn't perfect
-          const weeklyCommits = statsResponse.data.all;
-          totalCommits = weeklyCommits.reduce(
-            (sum: number, count: number) => sum + count,
-            0
-          );
+        if (linkHeader) {
+          const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+          if (lastPageMatch) {
+            const lastPage = parseInt(lastPageMatch[1]);
+            console.log(`[DEBUG] Last page detected: ${lastPage}`);
+
+            if (lastPage > 1) {
+              // Get the last page to see how many commits are on it
+              const lastPageResponse = await axios.get(
+                `https://api.github.com/repos/${fullRepoName}/commits`,
+                {
+                  headers: {
+                    Authorization: `token ${req.accessToken}`,
+                    Accept: "application/vnd.github.v3+json",
+                  },
+                  params: {
+                    per_page: perPage,
+                    page: lastPage,
+                  },
+                }
+              );
+              totalCommits =
+                (lastPage - 1) * perPage + lastPageResponse.data.length;
+              console.log(
+                `[DEBUG] Calculated total commits: ${totalCommits} (lastPage: ${lastPage}, perPage: ${perPage}, lastPageCommits: ${lastPageResponse.data.length})`
+              );
+            } else {
+              totalCommits = commits.length;
+              console.log(
+                `[DEBUG] Single page, total commits: ${totalCommits}`
+              );
+            }
+          }
         } else {
-          // Fallback: try to get from the default branch
-          const repoResponse = await axios.get(
-            `https://api.github.com/repos/${fullRepoName}`,
+          // Method 2: If no Link header, try a single request with per_page=1 to get total
+          console.log(`[DEBUG] No Link header, trying alternative method`);
+          const countResponse = await axios.get(
+            `https://api.github.com/repos/${fullRepoName}/commits`,
             {
               headers: {
                 Authorization: `token ${req.accessToken}`,
                 Accept: "application/vnd.github.v3+json",
               },
+              params: {
+                per_page: 1,
+                page: 1,
+              },
             }
           );
 
-          if (repoResponse.data.default_branch) {
-            // For a more accurate count, we can make a request with a very high per_page
-            // and get the total from the Link header
-            const highPageResponse = await axios.get(
-              `https://api.github.com/repos/${fullRepoName}/commits`,
-              {
-                headers: {
-                  Authorization: `token ${req.accessToken}`,
-                  Accept: "application/vnd.github.v3+json",
-                },
-                params: {
-                  per_page: 1,
-                  page: 1,
-                },
-              }
+          const countLinkHeader = countResponse.headers.link;
+          console.log(
+            `[DEBUG] Alternative method Link header:`,
+            countLinkHeader
+          );
+
+          if (countLinkHeader) {
+            const countLastPageMatch = countLinkHeader.match(
+              /page=(\d+)>; rel="last"/
             );
-
-            // Check if there's a Link header with last page info
-            const linkHeader = highPageResponse.headers.link;
-            if (linkHeader) {
-              const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
-              if (lastPageMatch) {
-                const lastPage = parseInt(lastPageMatch[1]);
-                // Get the last page to see how many commits are on it
-                const lastPageResponse = await axios.get(
-                  `https://api.github.com/repos/${fullRepoName}/commits`,
-                  {
-                    headers: {
-                      Authorization: `token ${req.accessToken}`,
-                      Accept: "application/vnd.github.v3+json",
-                    },
-                    params: {
-                      per_page: 100,
-                      page: lastPage,
-                    },
-                  }
-                );
-
-                totalCommits =
-                  (lastPage - 1) * 100 + lastPageResponse.data.length;
-              }
+            if (countLastPageMatch) {
+              const countLastPage = parseInt(countLastPageMatch[1]);
+              totalCommits = countLastPage;
+              console.log(
+                `[DEBUG] Alternative method total commits: ${totalCommits}`
+              );
             }
+          } else {
+            totalCommits = commits.length;
+            console.log(
+              `[DEBUG] No alternative method, using current commits length: ${totalCommits}`
+            );
           }
         }
       } catch (error) {
-        console.error("Error fetching total commit count:", error);
-        // If we can't get total count, estimate from current page
-        // This is a fallback but not ideal
+        console.error("Error calculating total commit count:", error);
+        // Fallback: estimate from current page
         totalCommits = page * perPage + commits.length;
+        console.log(`[DEBUG] Fallback total commits: ${totalCommits}`);
       }
+
+      console.log(
+        `[DEBUG] Final response - totalCommits: ${totalCommits}, hasMore: ${totalCommits > page * perPage + commits.length}`
+      );
 
       res.json({
         commits: commitsWithDiffs,
