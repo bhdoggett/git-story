@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // Helper function to analyze commits and group them by themes
 async function analyzeAndGroupCommits(commits: any[], globalContext?: string) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const contextSection = globalContext
     ? `\n\nProject Context:\n${globalContext}\n\nUse this context to better understand the project's goals, technologies, and development patterns when grouping commits.`
@@ -86,7 +86,7 @@ async function analyzeNewCommitsAgainstLastChapter(
   newCommits: any[],
   globalContext?: string
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const contextSection = globalContext
     ? `\n\nProject Context:\n${globalContext}\n\nUse this context to better understand if the new work continues the last chapter or starts a new theme.`
@@ -154,7 +154,7 @@ async function generateChapterSummary(
   chapterTitle: string,
   globalContext?: string
 ) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const contextSection = globalContext
     ? `\n\nProject Context:\n${globalContext}\n\nUse this context to provide more relevant and contextual summaries that align with the project's goals and technologies.`
