@@ -641,183 +641,191 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-semibold text-white">
-            Story for {repoName}
-          </h3>
-          <p className="text-gray-400 text-sm">
-            AI-powered chapter generation based on commit themes
-          </p>
-          {updateStatus && (
-            <div className="mt-2 text-sm">
-              {updateStatus.hasNewCommits ? (
-                <>
-                  <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-yellow-900/40 text-yellow-300 border border-yellow-700">
+      {/* Header - Only show when story exists */}
+      {story && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-semibold text-white">
+              Story for {repoName}
+            </h3>
+            <p className="text-gray-400 text-sm">
+              AI-powered chapter generation based on commit themes
+            </p>
+            {updateStatus && (
+              <div className="mt-2 text-sm">
+                {updateStatus.hasNewCommits ? (
+                  <>
+                    <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-yellow-900/40 text-yellow-300 border border-yellow-700">
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path d="M10 2a1 1 0 01.894.553l7 14A1 1 0 0117 18H3a1 1 0 01-.894-1.447l7-14A1 1 0 0110 2z" />
+                      </svg>
+                      {updateStatus.annotation ||
+                        `There are updates available.`}
+                    </span>
+                    <button
+                      onClick={handleAnalyzeUpdates}
+                      disabled={analyzingUpdates}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ml-2 bg-yellow-600 text-yellow-900 hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed border border-yellow-700 transition-colors"
+                    >
+                      {analyzingUpdates ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-900"></div>
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                          </svg>
+                          Update
+                        </>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-green-900/40 text-green-300 border border-green-700">
                     <svg
                       className="h-4 w-4"
                       viewBox="0 0 20 20"
                       fill="currentColor"
                     >
-                      <path d="M10 2a1 1 0 01.894.553l7 14A1 1 0 0117 18H3a1 1 0 01-.894-1.447l7-14A1 1 0 0110 2z" />
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L8.5 12.086l6.793-6.793a1 1 0 011.414 0z"
+                        clipRule="evenodd"
+                      />
                     </svg>
-                    {updateStatus.annotation || `There are updates available.`}
+                    Up to date
                   </span>
-                  <button
-                    onClick={handleAnalyzeUpdates}
-                    disabled={analyzingUpdates}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ml-2 bg-yellow-600 text-yellow-900 hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed border border-yellow-700 transition-colors"
-                  >
-                    {analyzingUpdates ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-900"></div>
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          className="h-3 w-3"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
-                        </svg>
-                        Update
-                      </>
-                    )}
-                  </button>
-                </>
-              ) : (
-                <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-green-900/40 text-green-300 border border-green-700">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L8.5 12.086l6.793-6.793a1 1 0 011.414 0z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  Up to date
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={generateChapters}
-            disabled={generating}
-            className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generating ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Generating Chapters...
-              </>
-            ) : (
-              "Generate Chapters"
+                )}
+              </div>
             )}
-          </button>
-
-          {story && story.chapters.length > 0 && (
-            <button
-              onClick={exportStory}
-              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700"
-            >
-              <svg
-                className="w-4 h-4 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              Export Story
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Global Context Section */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-        <h4 className="text-lg font-medium text-white mb-4">
-          What should we know about this project?
-        </h4>
-        <p className="text-gray-400 text-sm mb-4">
-          Help us understand this project better by providing context about key
-          moments, important tools, dependencies, or development milestones.
-          This will help the AI generate more relevant and personalized stories.
-        </p>
-
-        {editingGlobalContext ? (
-          <div className="space-y-3">
-            <textarea
-              value={globalContext}
-              onChange={(e) => {
-                const value = e.target.value;
-                setGlobalContext(value);
-                // Save to localStorage immediately as user types
-                localStorage.setItem(`globalContext_${repoId}`, value);
-              }}
-              className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
-              rows={4}
-              placeholder="Tell us about this project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
-              autoFocus
-            />
-            <div className="flex justify-end space-x-2">
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {story.chapters.length === 0 && (
               <button
-                onClick={() => {
-                  setEditingGlobalContext(false);
-                  setGlobalContext(globalContext); // Reset to original value
+                onClick={generateChapters}
+                disabled={generating}
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Generating Chapters...
+                  </>
+                ) : (
+                  "Generate Chapters"
+                )}
+              </button>
+            )}
+
+            {story.chapters.length > 0 && (
+              <button
+                onClick={exportStory}
+                className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                Export Story
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Global Context Section - Only show when story exists */}
+      {story && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+          <h4 className="text-lg font-medium text-white mb-4">
+            What should we know about this project?
+          </h4>
+          <p className="text-gray-400 text-sm mb-4">
+            Help us understand this project better by providing context about
+            key moments, important tools, dependencies, or development
+            milestones. This will help the AI generate more relevant and
+            personalized stories.
+          </p>
+
+          {editingGlobalContext ? (
+            <div className="space-y-3">
+              <textarea
+                value={globalContext}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setGlobalContext(value);
+                  // Save to localStorage immediately as user types
+                  localStorage.setItem(`globalContext_${repoId}`, value);
                 }}
-                className="text-gray-400 hover:text-gray-300 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => updateGlobalContext(globalContext)}
-                disabled={savingContext}
-                className="text-blue-400 hover:text-blue-300 text-sm disabled:opacity-50"
-              >
-                {savingContext ? "Saving..." : "Save Context"}
-              </button>
+                className="w-full bg-gray-900 border border-gray-600 text-white rounded p-3 text-sm focus:outline-none focus:border-blue-500"
+                rows={4}
+                placeholder="Tell us about this project... For example:&#10;- Key technologies and frameworks used&#10;- Important milestones or pivots&#10;- Specific challenges overcome&#10;- Tools or dependencies that were crucial&#10;- Team dynamics or collaboration patterns"
+                autoFocus
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => {
+                    setEditingGlobalContext(false);
+                    setGlobalContext(globalContext); // Reset to original value
+                  }}
+                  className="text-gray-400 hover:text-gray-300 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateGlobalContext(globalContext)}
+                  disabled={savingContext}
+                  className="text-blue-400 hover:text-blue-300 text-sm disabled:opacity-50"
+                >
+                  {savingContext ? "Saving..." : "Save Context"}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div
-            className="bg-gray-900 border border-gray-600 rounded p-3 cursor-pointer hover:border-gray-500"
-            onClick={() => setEditingGlobalContext(true)}
-          >
-            {globalContext ? (
-              <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
-                {globalContext}
+          ) : (
+            <div
+              className="bg-gray-900 border border-gray-600 rounded p-3 cursor-pointer hover:border-gray-500"
+              onClick={() => setEditingGlobalContext(true)}
+            >
+              {globalContext ? (
+                <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
+                  {globalContext}
+                </p>
+              ) : (
+                <p className="text-gray-500 text-sm italic">
+                  Click to add context about this project...
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Click to edit project context
               </p>
-            ) : (
-              <p className="text-gray-500 text-sm italic">
-                Click to add context about this project...
-              </p>
-            )}
-            <p className="text-xs text-gray-500 mt-2">
-              Click to edit project context
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Story Content */}
       {story && story.chapters.length > 0 ? (
