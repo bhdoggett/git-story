@@ -148,6 +148,27 @@ export const apiClient = {
     // Update global context for a story
     updateGlobalContext: (repoId: string, globalContext: string) =>
       api.put(`/api/stories/story/${repoId}/context`, { globalContext }),
+
+    // Upload git log file to generate initial story
+    uploadGitLog: (
+      repoId: string,
+      file: File,
+      globalContext?: string,
+      onUploadProgress?: (progressEvent: any) => void
+    ) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (globalContext) {
+        formData.append("globalContext", globalContext);
+      }
+
+      return api.post(`/api/stories/upload-git-log/${repoId}`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress,
+      });
+    },
   },
 };
 

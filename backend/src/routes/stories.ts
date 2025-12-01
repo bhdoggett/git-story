@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import prisma from "../lib/prisma";
+import { requireAuth } from "../middleware/auth";
+import { uploadGitLog } from "../middleware/upload";
+import { parseGitLog, transformToGitHubFormat } from "../lib/gitLogParser";
 
 const router = Router();
 
@@ -312,6 +315,149 @@ router.post(
     } catch (error) {
       console.error("Error generating chapters:", error);
       res.status(500).json({ error: "Failed to generate chapters" });
+    }
+  }
+);
+
+// Upload git log file to generate initial story
+router.post(
+  "/upload-git-log/:repoId",
+  requireAuth,
+  uploadGitLog.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      const { repoId } = req.params;
+      const { globalContext } = req.body;
+      const userId = req.session.userId;
+
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      // Validate user owns the repository
+      const repo = await prisma.repo.findFirst({
+        where: { id: repoId, userId },
+      });
+
+      if (!repo) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if story already exists
+      const existingStory = await prisma.story.findFirst({
+        where: { repoId },
+      });
+
+      if (existingStory) {
+        return res.status(409).json({
+          error: "Story already exists for this repository",
+          storyId: existingStory.id,
+        });
+      }
+
+      // Validate file was uploaded
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // Read uploaded file from memory buffer and convert to string
+      const fileContent = req.file.buffer.toString("utf-8");
+
+      // Parse git log file
+      const parseResult = parseGitLog(fileContent);
+
+      // Check if parsing was successful enough (at least 50% success rate)
+      if (parseResult.totalCommits === 0) {
+        return res.status(400).json({
+          error: "No valid commits found in uploaded file",
+        });
+      }
+
+      if (parseResult.successfullyParsed < parseResult.totalCommits * 0.5) {
+        return res.status(400).json({
+          error:
+            "Unable to parse git log file. Please ensure it was generated with the correct command",
+          details: {
+            totalCommits: parseResult.totalCommits,
+            successfullyParsed: parseResult.successfullyParsed,
+            errors: parseResult.errors,
+          },
+        });
+      }
+
+      // Transform parsed commits to GitHub API format
+      const commits = transformToGitHubFormat(parseResult.commits);
+
+      // Analyze and group commits using existing function
+      const chapterGroups = await analyzeAndGroupCommits(
+        commits,
+        globalContext
+      );
+
+      // Create story
+      const story = await prisma.story.create({
+        data: {
+          repoId,
+          globalContext: globalContext || null,
+        },
+      });
+
+      // Generate chapters with summaries
+      const chapters = [];
+      for (const group of chapterGroups) {
+        const chapterCommits = commits.filter((c: any) =>
+          group.commitShas.includes(c.sha)
+        );
+        const summary = await generateChapterSummary(
+          chapterCommits,
+          group.title,
+          globalContext
+        );
+
+        const chapter = await prisma.chapter.create({
+          data: {
+            storyId: story.id,
+            title: group.title,
+            summary,
+            commitShas: group.commitShas,
+          },
+        });
+
+        chapters.push(chapter);
+      }
+
+      // Return created story with chapters
+      res.json({
+        id: story.id,
+        repoId: story.repoId,
+        createdAt: story.createdAt,
+        chapters: chapters.map((chapter) => ({
+          id: chapter.id,
+          title: chapter.title,
+          summary: chapter.summary,
+          commitShas: chapter.commitShas,
+          commitCount: chapter.commitShas.length,
+        })),
+      });
+    } catch (error) {
+      console.error("Error processing git log upload:", error);
+
+      // Handle multer errors
+      if (
+        error instanceof Error &&
+        error.message === "Only .txt files are allowed"
+      ) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      // Handle file size errors
+      if (error instanceof Error && error.message.includes("File too large")) {
+        return res
+          .status(400)
+          .json({ error: "File is too large. Maximum size is 100MB" });
+      }
+
+      res.status(500).json({ error: "Failed to process git log upload" });
     }
   }
 );

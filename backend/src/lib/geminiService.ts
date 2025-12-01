@@ -104,31 +104,21 @@ export class GeminiService {
   ): Promise<{ [sha: string]: string }> {
     const analyses: { [sha: string]: string } = {};
 
-    // Process commits in batches to avoid rate limiting
-    const batchSize = 5;
-    for (let i = 0; i < commits.length; i += batchSize) {
-      const batch = commits.slice(i, i + batchSize);
-      const batchPromises = batch.map(async (commit) => {
-        try {
-          const analysis = await this.analyzeCommit(commit);
-          return { sha: commit.sha, analysis };
-        } catch (error) {
-          console.error(`Failed to analyze commit ${commit.sha}:`, error);
-          return {
-            sha: commit.sha,
-            analysis: "Analysis unavailable - please try again later.",
-          };
-        }
-      });
+    // Process commits one at a time to respect free tier rate limits (15 RPM)
+    // With 5 second delays, we can safely process 12 commits per minute
+    for (let i = 0; i < commits.length; i++) {
+      const commit = commits[i];
+      try {
+        const analysis = await this.analyzeCommit(commit);
+        analyses[commit.sha] = analysis;
+      } catch (error) {
+        console.error(`Failed to analyze commit ${commit.sha}:`, error);
+        analyses[commit.sha] = "Analysis unavailable - please try again later.";
+      }
 
-      const batchResults = await Promise.all(batchPromises);
-      batchResults.forEach(({ sha, analysis }) => {
-        analyses[sha] = analysis;
-      });
-
-      // Add a small delay between batches to be respectful of API limits
-      if (i + batchSize < commits.length) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wait 5 seconds between requests to stay well under 15 RPM limit
+      if (i < commits.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
 

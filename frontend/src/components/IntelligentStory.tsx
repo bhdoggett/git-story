@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { apiClient } from "../utils/api";
 import CommitDisplay from "./CommitDisplay";
 import { storyCache, calculateDateRange } from "../utils/indexedDB";
+import GitLogUploadInterface from "./GitLogUploadInterface";
 
 interface DiffFile {
   filename: string;
@@ -92,6 +93,7 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     proposedTitle?: string | null;
     reasoning: string;
   } | null>(null);
+  const [showUploadSuccess, setShowUploadSuccess] = useState<boolean>(false);
 
   useEffect(() => {
     fetchStory();
@@ -527,6 +529,55 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
     }
   };
 
+  const handleUploadComplete = async (uploadedStory: Story) => {
+    // Set the story state with the uploaded story
+    setStory(uploadedStory);
+
+    // Initialize notes state
+    const notes: { [chapterId: string]: string } = {};
+    uploadedStory.chapters.forEach((chapter: Chapter) => {
+      notes[chapter.id] = chapter.userNotes || "";
+    });
+    setChapterNotes(notes);
+
+    // Fetch commit data for all chapters to display date ranges
+    for (const chapter of uploadedStory.chapters) {
+      try {
+        const commitResponse = await apiClient.stories.getChapterCommits(
+          chapter.id
+        );
+        const commits = commitResponse.data.commits;
+
+        setChapterCommits((prev) => ({
+          ...prev,
+          [chapter.id]: commits,
+        }));
+
+        // Cache the commit data
+        await storyCache.setChapterCommits(chapter.id, commits);
+      } catch (error) {
+        console.error(
+          `Error fetching commits for chapter ${chapter.id}:`,
+          error
+        );
+      }
+    }
+
+    // Cache the story data
+    await storyCache.setStory({
+      ...uploadedStory,
+      repoName,
+      lastUpdated: Date.now(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    });
+
+    // Show success notification
+    setShowUploadSuccess(true);
+
+    // Refresh update status
+    await checkUpdates();
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-8">
@@ -537,6 +588,59 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Success Notification Banner */}
+      {showUploadSuccess && (
+        <div className="bg-green-900/50 border border-green-800 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-6 w-6 text-green-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-green-300">
+                Story created successfully!
+              </h3>
+              <div className="mt-2 text-sm text-green-400">
+                <p>
+                  Your initial story has been generated from the uploaded git
+                  log. Future updates can be synced automatically via GitHub -
+                  no need to upload again! Just click the "Update" button when
+                  new commits are available.
+                </p>
+              </div>
+            </div>
+            <div className="ml-3 flex-shrink-0">
+              <button
+                onClick={() => setShowUploadSuccess(false)}
+                className="inline-flex text-green-400 hover:text-green-300"
+              >
+                <span className="sr-only">Dismiss</span>
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -975,30 +1079,11 @@ const IntelligentStory: React.FC<IntelligentStoryProps> = ({
           </div>
         </div>
       ) : (
-        <div className="text-center py-8">
-          <div className="text-gray-400">
-            <svg
-              className="mx-auto h-12 w-12 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <h3 className="text-lg font-medium text-white mb-2">
-              Ready to create your story
-            </h3>
-            <p className="text-gray-400">
-              Generate intelligent chapters that group your commits by themes
-              and features.
-            </p>
-          </div>
-        </div>
+        <GitLogUploadInterface
+          repoId={repoId}
+          repoName={repoName}
+          onUploadComplete={handleUploadComplete}
+        />
       )}
 
       {/* Update Analysis Dialog */}
